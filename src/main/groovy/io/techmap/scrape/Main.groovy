@@ -2,8 +2,6 @@ package io.techmap.scrape
 
 import groovy.util.logging.Log4j2
 
-import io.techmap.scrape.connectors.MongoDBConnector
-
 import io.techmap.scrape.scraper.AScraper
 import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.LogManager
@@ -11,7 +9,6 @@ import org.apache.logging.log4j.core.LoggerContext
 
 @Log4j2
 class Main {
-	static MongoDBConnector db = MongoDBConnector.getInstance().init()
 
 	static void main(String[] args) {
 		LoggerContext context = (LoggerContext) LogManager.getContext(false)
@@ -24,7 +21,7 @@ class Main {
 
 		printSystemInfo()
 
-		System.setProperty("https.protocols", "TLSv1,TLSv1.1,TLSv1.2")
+		System.setProperty("https.protocols", "TLSv1,TLSv1.1,TLSv1.2") // used in HTTP communication with external webservers
 
 		args = args*.split(',').flatten()*.trim() // Ugly workaround as Intellij does not allow multiple arguments
 		String	command	= (args.length >= 1 ? args?.getAt(0) : "")
@@ -44,11 +41,11 @@ class Main {
 	}
 
 	static void scrapeSource(String source, Integer numberOfPages) {
-		def scraper = Class.forName("io.techmap.scrape.scraper.webscraper.${source}Scraper")
+		Class<? extends AScraper> scraper = Class.forName("io.techmap.scrape.scraper.webscraper.${source}Scraper")
 		triggerScraper(scraper, numberOfPages)
 	}
 
-	private static int triggerScraper(Class<? extends AScraper> scraper, Integer numberOfPages) {
+	private static void triggerScraper(Class<? extends AScraper> scraper, Integer numberOfPages) {
 		// Set external value for max Docs To Print
 		scraper.maxDocsToPrint = numberOfPages ?: scraper.maxDocsToPrint
 
@@ -56,13 +53,10 @@ class Main {
 		int sourceIndex = 0
 
 		// Start scraper on source with sourceIndex
-		def sourceID = scraper.startOne(scraper, sourceIndex)
-
-		log.info "End of scraping ${scraper.jobsInAllSourcesCount} jobs of source ${sourceID}"
-		return scraper.jobsInAllSourcesCount
+		scraper.startOne(scraper, sourceIndex)
 	}
 
-	private static void printSystemInfo(String[] args) {
+	private static void printSystemInfo() {
 		log.info "Program is using Java version ${System.getProperty("java.version")}"
 		log.info "Program is using Groovy version ${GroovySystem.version}"
 		def DOCKER_TAG = System.getenv("DOCKER_TAG")//System.getProperty("DOCKER_TAG")

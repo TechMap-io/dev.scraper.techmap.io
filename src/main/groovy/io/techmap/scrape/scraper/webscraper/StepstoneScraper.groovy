@@ -29,100 +29,95 @@ class StepstoneScraper extends AWebScraper {
 			[id: "de", url: "https://www.stepstone.de"],
 			[id: "at", url: "https://www.stepstone.at"],
 			[id: "fr", url: "https://www.stepstone.fr"],
-			[id: "pl", url: "https://www.stepstone.pl"],
+			[id: "pl", url: "https://www.stepstone.pl"]
 	]
 	static final String baseSourceID = 'stepstone_'
 
 	StepstoneScraper(Integer sourceToScrape) {
-		super(sources, baseSourceID)
 		this.sourceToScrape = sourceToScrape
 		this.source = this.sources[sourceToScrape]
 		this.sourceID = this.baseSourceID + this.source.id
-		log.info "Using userAgent: ${userAgent}"
+		log.info "Using userAgent: ${USER_AGENT}"
 	}
 
-	private int scrape() {
+	@Override
+	int scrape() {
 		super.initScrape()
-		def startTime = new Date()
 
 		Integer jobsInSourceCount = 0
 		def startPage = loadPage("${source.url}")
 		final def startCookies = this.cookiesForThread."${Thread.currentThread().getId()}" ?: [:]
 
-		def categories = startPage?.select("#jobsbycategory ul li a")?.sort { it.text() } // sort necessary for compare with status.lastCategory
-		if (!categories || categories?.size() == 0) { // Only for Monster_at? Probably userAgent or initial page (test Google.com?)
-			log.fatal "Could not find any categories in following page with userAgent $userAgent! \n${startpage?.html()}"
-			return -1
-		}
+		// Identify groups of jobs such as categories, industries or Jobnames we can iterate over
+		def groups = startPage?.select("#jobsbycategory ul li a")?.sort { it.text() } // sort necessary for compare with status.lastCategory
 
-		for (Element category in categories) {
-			def status = db.loadStatus(sourceID+"-${category.text()}")
+		for (Element group in groups) {
+			def status = db.loadStatus(sourceID+"-${group.text()}")
 			this.cookiesForThread."${Thread.currentThread().getId()}" = startCookies
-			int jobsInCategoryCount = scrapeJobCategory(category, status)
+			int jobsInCategoryCount = scrapePageGroup(group, status)
 			jobsInSourceCount += jobsInCategoryCount
 			if (maxDocsToPrint <= 0) break
 		}
 
-		log.info "End of scraping ${"$jobsInSourceCount".padLeft(5)} jobs in " + TimeCategory.minus( new Date() , startTime )
 		return jobsInSourceCount
 	}
 
-	private int scrapeJobCategory(Element category, Map status) {
+	@Override
+	int scrapePageGroup(Element group, Map status) {
 		def startTime = new Date()
-		log.debug "... starting to scrape category ${category.text()}"
-		def nextURL = category.absUrl("href") // Problem: first page has no offset
-		def jobListPage = loadPage(nextURL)
-		if (!jobListPage) {
-			// retry / reload after short sleep
-			sleep 500
-			jobListPage = loadPage(nextURL)
-		}
-		int maxJobsInCategory = (jobListPage?.select(".at-resultstitle > span > strong > b > strong")?.text() ?: 0)?.toInteger()
+		log.debug "... starting to scrape group ${group.text()}"
+		def nextURL = group.absUrl("href") // Problem: first page has no offset
+		def paginationPage = loadPage(nextURL)
+
+		int maxJobsInGroup = (paginationPage?.select(".at-resultstitle > span > strong > b > strong")?.text() ?: 0)?.toInteger()
 
 		int offset = 0
-		int jobsInCategoryCount = 0
+		int jobsInGroupCount = 0
 		while (nextURL) {
-			def jobLinks = jobListPage?.select(".job-elements-list .job-element a.job-element__url,article[id^=job-item] a[target=_blank]")
-			int jobsInJobListCount = scrapeJobList(jobLinks, [category: category.text()])
-			jobsInCategoryCount += jobsInJobListCount
-			log.debug "... scraped ${"$jobsInJobListCount".padLeft(4)} of ${"$maxJobsInCategory".padLeft(5)} jobs with offset $offset in category ${category.text()}"
+			// NOTE: this mechanism ready the "next" URL in a pagination - some pages might require different approaches (e.g., increasing a "page" parameter)
+			def jobLinks = paginationPage?.select(".job-elements-list .job-element a.job-element__url,article[id^=job-item] a[target=_blank]")
+			int jobsInJobListCount = scrapePageList(jobLinks, [category: group.text()])
+			jobsInGroupCount += jobsInJobListCount
+			log.debug "... scraped ${"$jobsInJobListCount".padLeft(4)} of ${"$maxJobsInGroup".padLeft(5)} jobs with offset $offset in group ${group.text()}"
 
 			// if (jobsInJobListCount <= 0) break // switch deep scraping (when disabled) and shallow scraping (when enabled)
 			if (maxDocsToPrint <= 0) break
 
-			// "click next": get next URL and load for next iteration
-			def nextPageButtonURL = jobListPage?.select(".hidden-xs .pagination-resultlist .pagination-resultlist__btn_next a, a[title=Next], a[aria-label='next page']")?.getAt(0)?.absUrl("href")
+			// Get next URL and load page for next iteration
+			def nextPageButtonURL = paginationPage?.select(".hidden-xs .pagination-resultlist .pagination-resultlist__btn_next a, a[title=Next], a[aria-label='next page']")?.getAt(0)?.absUrl("href")
 			offset = Math.max(status.lastOffset ?: 0, (nextPageButtonURL?.replaceAll(/.*[\?&]of=(\d+)&.*/, '$1') ?: 25)?.toInteger())
 			nextURL = nextPageButtonURL?.replaceAll(/&li=(\d+)/, '')?.replaceAll(/&of=(\d+)&/, "&of=$offset&li=100&")
 			if (nextURL) {
-				jobListPage = loadPage(nextURL)
+				paginationPage = loadPage(nextURL)
 				status.lastOffset = offset
 				db.saveStatus(status)
 			}
 		}
 		status.lastOffset = 0 // Reset
 		db.saveStatus(status)
-		log.info "Scraped ${"$jobsInCategoryCount".padLeft(5)} of ${"$maxJobsInCategory".padLeft(6)} jobs in category ${category.text()} in " + TimeCategory.minus( new Date() , startTime )
-		return jobsInCategoryCount
+		log.info "Scraped ${"$jobsInGroupCount".padLeft(5)} of ${"$maxJobsInGroup".padLeft(6)} jobs in group ${group.text()} in " + TimeCategory.minus( new Date() , startTime )
+		return jobsInGroupCount
 	}
 
-	private int scrapeJobList(Elements jobElements, Map extraData) {
+	@Override
+	int scrapePageList(Elements pageElements, Map extraData) {
 		int jobsInPageCount = 0
-		for (jobElement in jobElements) {
-			String jobPageURL = jobElement?.absUrl("href")
+		for (pageElement in pageElements) {
+			String jobPageURL = pageElement?.absUrl("href")
 			String idInSource = jobPageURL?.replaceAll(/.*-([^\-\/\&]+)-inline.*$/,'$1')?.trim()
 			if (!db.jobExists(sourceID, idInSource)) {
 				extraData.idInSource = idInSource
-				if (scrapeJobPage(jobPageURL, extraData)) jobsInPageCount++
+				if (scrapePage(jobPageURL, extraData)) jobsInPageCount++
 			}
 			if (maxDocsToPrint <= 0) break
 		}
 		return jobsInPageCount
 	}
 
-	private boolean scrapeJobPage(final String jobPageURL, Map extraData) {
+	@Override
+	boolean scrapePage(String pageURL, Map extraData) {
 		try {
-			def jobPage = loadPage(jobPageURL)
+			def jobPage = loadPage(pageURL)
 			if (!jobPage) return false
 
 			/*******************************/
@@ -150,7 +145,7 @@ class StepstoneScraper extends AWebScraper {
 			Job job = new Job()
 			job.source		= sourceID
 			job.idInSource	= extraData.idInSource ?: data?.listing__listing_id ?: data4?.listingData?.id ?: data5?.listingId
-			job.url			= jobPageURL ?: jobPage?.select("link[rel=canonical]")?.first()?.attr("href")
+			job.url			= pageURL ?: jobPage?.select("link[rel=canonical]")?.first()?.attr("href")
 			job.name		= data?.listing__title?.trim() ?: data4?.listingData?.title
 
 			job.locale		= data5?.locale ?: data3?.locale
@@ -240,13 +235,13 @@ class StepstoneScraper extends AWebScraper {
 
 			return crossreferenceAndSaveData(job, location, company, rawPage)
 		} catch (HttpStatusException e) {
-			log.error "$e for $jobPageURL"
+			log.error "$e for $pageURL"
 		} catch (IOException e) {
-			log.error "$e for $jobPageURL"
+			log.error "$e for $pageURL"
 		} catch (NullPointerException e) {
-			log.error "$e for $jobPageURL" // probably a problem with SimpleDateFormat (do not store job)
+			log.error "$e for $pageURL" // probably a problem with SimpleDateFormat (do not store job)
 		} catch (e) {
-			log.error "$e for $jobPageURL"
+			log.error "$e for $pageURL"
 			e.printStackTrace()
 		}
 		return false

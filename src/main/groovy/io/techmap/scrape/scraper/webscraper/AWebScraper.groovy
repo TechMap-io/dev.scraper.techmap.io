@@ -7,20 +7,36 @@ import org.bson.Document
 import org.jsoup.Connection
 import org.jsoup.HttpStatusException
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
+import org.jsoup.select.Elements
 
 @Log4j2
 abstract class AWebScraper extends AScraper {
-	public static MongoDBConnector db = MongoDBConnector.getInstance() // NOTE: needed for payload
+	static MongoDBConnector db = MongoDBConnector.getInstance()
 
-	Map cookiesForThread = [:]
-	final Integer timeout = 1000 * 60	// use timeout of 60 seconds
+	Map cookiesForThread = [:]	// used to handle cookies in multiple threads
+	final Integer	TIMEOUT		= 1000 * 60	// 60 seconds
+	final String	USER_AGENT	= "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.123 Safari/537.36"
 
-	final String userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.123 Safari/537.36"
-	String getUserAgent() { return userAgent }
+	/********************/
+	/* Abstract Methods */
+	/********************/
 
-	AWebScraper(ArrayList sources, String baseSourceID) {
-		// Load userAgents and set random as default (can be overwritten by Scraper)
-	}
+	/** The main entry point to start the scraping process */
+	abstract protected int scrape();
+
+	/** Method to handle a group of pages such as catgories, industries, or letters */
+	abstract protected int scrapePageGroup(Element group, Map status);
+
+	/** Method to loop over a list of pages on a paginated list of jobs */
+	abstract protected int scrapePageList(Elements jobElements, Map extraData);
+
+	/** Method to scrape one specific page identified by its URL */
+	abstract protected boolean scrapePage(String jobPageURL, Map extraData);
+
+	/*********************************************/
+	/* Helper Methods for all Web-based Scrapers */
+	/*********************************************/
 
 	protected Document initScrape() {
 		log.info "Start of scraping '${source.url}'"
@@ -35,8 +51,8 @@ abstract class AWebScraper extends AScraper {
 		def cookies = this.cookiesForThread."${Thread.currentThread().getId()}" ?: [:]
 
 		def response = Jsoup.connect(url)
-				.timeout(timeout)
-				.userAgent(userAgent)
+				.timeout(TIMEOUT)
+				.userAgent(USER_AGENT)
 				.header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
 				.header("Accept-Encoding", "gzip, deflate, br")
 				.header("Accept-Language", "en-US,en;q=0.9,de;q=0.8,es;q=0.7")
@@ -53,7 +69,7 @@ abstract class AWebScraper extends AScraper {
 		if (url.contains(".indeed.")) {
 			response = response.header("Sec-Fetch-Site", "same-origin")	// for indeed
 		} else if (url.contains("meinestadt.de")) { // special handing due to many more "404" for meinestadt.de
-			response = response.timeout(timeout * 4)
+			response = response.timeout(TIMEOUT * 4)
 			response = response.header("Sec-Fetch-Site", "none")
 			response = response.header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3")
 		} else {
@@ -114,9 +130,9 @@ abstract class AWebScraper extends AScraper {
 			def cookies = this.cookiesForThread."${Thread.currentThread().getId()}" ?: [:]
 
 			def response = Jsoup.connect(url)
-					.timeout(timeout)
+					.timeout(TIMEOUT)
 					.ignoreContentType(true)
-					.userAgent(userAgent)
+					.userAgent(USER_AGENT)
 					.cookies(cookies)
 					.method(Connection.Method.POST)
 					.header("Accept", "*/*")

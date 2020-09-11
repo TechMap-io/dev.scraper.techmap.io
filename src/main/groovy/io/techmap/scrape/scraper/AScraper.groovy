@@ -1,6 +1,7 @@
 package io.techmap.scrape.scraper
 
 import groovy.json.JsonBuilder
+import groovy.time.TimeCategory
 import groovy.util.logging.Log4j2
 import io.techmap.scrape.data.Company
 import io.techmap.scrape.data.Job
@@ -13,7 +14,7 @@ abstract class AScraper {
 
 	static int jobsInAllSourcesCount = 0
 
-	static Integer maxDocsToPrint = 30
+	static Integer maxDocsToPrint = 10
 
 	Integer sourceToScrape
 	Map source
@@ -23,12 +24,13 @@ abstract class AScraper {
 	/* Thread-related Methods */
 	/**************************/
 
-	static String startOne(Class<? extends AScraper> scraper, Integer sourceToScrape) {
-		def myRunnable = scraper.newInstance(sourceToScrape)
+	static void startOne(Class<? extends AScraper> scraper, Integer sourceToScrape) {
+		def startTime = new Date()
 
+		def myRunnable = scraper.newInstance(sourceToScrape)
 		scraper.jobsInAllSourcesCount = myRunnable.scrape()
 
-		return myRunnable.sourceID
+		log.info "End of scraping ${"${scraper.jobsInAllSourcesCount}".padLeft(5)} jobs in source ${myRunnable.sourceID} within " + TimeCategory.minus( new Date() , startTime )
 	}
 
 	/******************/
