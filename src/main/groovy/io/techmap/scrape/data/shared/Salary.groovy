@@ -1,9 +1,7 @@
 package io.techmap.scrape.data.shared
 
-import dev.morphia.annotations.Embedded
 import org.bson.Document
 
-@Embedded
 class Salary {
 	/** Raw textual statement on salary */
 	String text

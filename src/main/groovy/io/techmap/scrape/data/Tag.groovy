@@ -1,16 +1,8 @@
 package io.techmap.scrape.data
 
-import dev.morphia.annotations.Entity
-import dev.morphia.annotations.Id
-
 import io.techmap.scrape.data.shared.TagType
-import org.bson.types.ObjectId
 
-@Entity(value="tags", noClassnameStored=true)
 class Tag {
-	@Id
-	ObjectId _id
-
 	/** Raw textual name of the Tag such as "Java" */
 	String	name	= ""
 	/** Controlled Type of the Tag such as TagType.SKILLS */

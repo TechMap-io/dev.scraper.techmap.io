@@ -1,7 +1,6 @@
 package io.techmap.scrape.scraper
 
 import groovy.json.JsonBuilder
-import groovy.json.JsonOutput
 import groovy.util.logging.Log4j2
 import io.techmap.scrape.data.Company
 import io.techmap.scrape.data.Job
@@ -14,7 +13,7 @@ abstract class AScraper {
 
 	static int jobsInAllSourcesCount = 0
 
-	int maxDocsToPrint = 30
+	static Integer maxDocsToPrint = 30
 
 	Integer sourceToScrape
 	Map source

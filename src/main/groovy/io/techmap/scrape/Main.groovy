@@ -27,14 +27,14 @@ class Main {
 		System.setProperty("https.protocols", "TLSv1,TLSv1.1,TLSv1.2")
 
 		args = args*.split(',').flatten()*.trim() // Ugly workaround as Intellij does not allow multiple arguments
-		def command = (args.length >= 1 ? args?.getAt(0) : "")
-		def arg2 = (args.length >= 2 ? args?.getAt(1) : "")
-		def arg3 = (args.length >= 3 ? args?.getAt(2) : "")
+		String	command	= (args.length >= 1 ? args?.getAt(0) : "")
+		String	source	= (args.length >= 2 ? args?.getAt(1) : "")
+		Integer	numberOfPages = ((args.length >= 3 ? args?.getAt(2) : "")?: "2") as Integer
 		log.info "Starting with args: $args"
 
 		switch (command) {
-			case "selfTest":				log.info "Selftest successful: Looks like I'm running OK!"; break
-			case "scrape":					scrapeSource(arg2, arg3); break
+			case "selftest":	log.info "Selftest successful: Looks like I'm running OK!"; break
+			case "scrape":		scrapeSource(source, numberOfPages); break
 			default:
 				log.warn "No command '$command' found with args: '$args'"
 				break
@@ -43,12 +43,14 @@ class Main {
 		log.info "Finnished run with args: $args"
 	}
 
-	static void scrapeSource(String source, String locale = null) {
+	static void scrapeSource(String source, Integer numberOfPages) {
 		def scraper = Class.forName("io.techmap.scrape.scraper.webscraper.${source}Scraper")
-		triggerScraper(scraper, source, locale)
+		triggerScraper(scraper, numberOfPages)
 	}
 
-	private static int triggerScraper(Class<? extends AScraper> scraper, String source, String locale) {
+	private static int triggerScraper(Class<? extends AScraper> scraper, Integer numberOfPages) {
+		// Set external value for max Docs To Print
+		scraper.maxDocsToPrint = numberOfPages ?: scraper.maxDocsToPrint
 
 		// NOTE: normally the oldest source/website is read from the DB (e.g., stepstone_nl) - here we always use the first
 		int sourceIndex = 0

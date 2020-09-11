@@ -1,8 +1,5 @@
 package io.techmap.scrape.data.shared
 
-import dev.morphia.annotations.Embedded
-
-@Embedded
 class Address {
 	/** Name of the source such as "stepstone_de" */
 	String	source

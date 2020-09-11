@@ -1,9 +1,7 @@
 package io.techmap.scrape.data.shared
 
-import dev.morphia.annotations.Embedded
 import org.bson.Document
 
-@Embedded
 class Position {
 	/** The job's name - it will be reduced later */
 	String name

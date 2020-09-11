@@ -1,19 +1,13 @@
 package io.techmap.scrape.data
 
-import dev.morphia.annotations.Id
 import groovy.util.logging.Log4j2
-import io.techmap.scrape.connectors.MongoDBConnector
 import io.techmap.scrape.data.shared.TagType
-import org.bson.types.ObjectId
 
 import java.time.LocalDateTime
 
 /** Superclass for all MongoDB documents with general fields */
 @Log4j2
 abstract class AMongoDbDocument {
-	@Id
-	ObjectId _id
-
 	/** Name of the source such as "stepstone_de" */
 	String	source	= ""
 
@@ -40,7 +34,7 @@ abstract class AMongoDbDocument {
 			log.error "Invalid name for AMongoDbDocument with name '${this.name}' (idInSource: ${this.idInSource}) url: ${this.url}"
 			return false
 		}
-		if (this.name?.findAll("${this.name?.take(3)}")?.size >= 2) { // find duplicate names such as "LeedsLeeds" (probably a Jsoup select problem)
+		if (this.name?.findAll("${this.name?.take(3)}")?.size() >= 2) { // find duplicate names such as "LeedsLeeds" (probably a Jsoup select problem)
 			log.error "Invalid idInSource '${this.idInSource}' for company: $this"
 			return false
 		}

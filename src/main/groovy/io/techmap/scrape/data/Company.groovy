@@ -1,10 +1,8 @@
 package io.techmap.scrape.data
 
-import dev.morphia.annotations.Entity
 import groovy.util.logging.Log4j2
 
 @Log4j2
-@Entity(value="companies", noClassnameStored=true)
 class Company extends AMongoDbDocument {
 
 	/** Description of the company as listed in a job or on a company page */

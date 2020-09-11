@@ -1,6 +1,5 @@
 package io.techmap.scrape.data
 
-import dev.morphia.annotations.Entity
 import groovy.util.logging.Log4j2
 import io.techmap.scrape.data.shared.Address
 import io.techmap.scrape.data.shared.Contact
@@ -10,7 +9,6 @@ import io.techmap.scrape.data.shared.Salary
 import java.time.LocalDateTime
 
 @Log4j2
-@Entity(value="jobs", noClassnameStored=true)
 class Job extends AMongoDbDocument {
 
 	/** Raw text of the job ad (generated via .text()method from JSoup) */

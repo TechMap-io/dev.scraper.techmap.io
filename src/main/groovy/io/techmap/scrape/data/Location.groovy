@@ -1,12 +1,10 @@
 package io.techmap.scrape.data
 
-import dev.morphia.annotations.Entity
 import groovy.util.logging.Log4j2
 import io.techmap.scrape.data.shared.Address
 import io.techmap.scrape.data.shared.Contact
 
 @Log4j2
-@Entity(value="locations", noClassnameStored=true)
 class Location extends AMongoDbDocument {
 
 	/** Description of the company as listed in a job or on a company page */
