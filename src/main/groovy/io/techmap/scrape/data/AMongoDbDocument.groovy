@@ -34,7 +34,7 @@ abstract class AMongoDbDocument {
 			log.error "Invalid name for AMongoDbDocument with name '${this.name}' (idInSource: ${this.idInSource}) url: ${this.url}"
 			return false
 		}
-		if (this.name?.findAll("${this.name?.take(3)}")?.size() >= 2) { // find duplicate names such as "LeedsLeeds" (probably a Jsoup select problem)
+		if (this.name?.count("${this.name?.take(3)}") >= 2) { // find duplicate names such as "LeedsLeeds" (probably a Jsoup select problem)
 			log.error "Invalid idInSource '${this.idInSource}' for company: $this"
 			return false
 		}

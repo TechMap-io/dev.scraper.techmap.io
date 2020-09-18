@@ -1,5 +1,8 @@
 package io.techmap.scrape.data.shared
 
+import groovy.util.logging.Log4j2
+
+@Log4j2
 class GeoPoint  {
 	/** Latitude of the geopoint */
 	Double	lat

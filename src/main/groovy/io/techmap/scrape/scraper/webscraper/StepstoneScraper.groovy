@@ -132,7 +132,7 @@ class StepstoneScraper extends AWebScraper {
 			def dataRaw2b	= jobPage?.select("script")*.html().find {	it.contains("LocationWithCommuteTimeBlock") }?.replaceAll(/(?s).*LocationWithCommuteTimeBlock = ([^;]+);/, '$1')?.replaceAll(/(?s)\s+/, ' ')
 			data2 = data2 ?: jsonSlurper.parseText(dataRaw2b ?: "{}")
 			def data3
-			try { data3		= jsonSlurper.parseText(jobPage?.select(".js-sticky-bar")*.attr("io.techmap.scrape.data-apply-button") ?: "{}") } catch(e) { /*ignore*/ }
+			try { data3		= jsonSlurper.parseText(jobPage?.select(".js-sticky-bar")*.attr(".data-apply-button") ?: "{}") } catch(e) { /*ignore*/ }
 			def dataRaw4	= jobPage?.select("script#js-section-preloaded-HeaderStepStoneBlock")?.first()?.html()?.replaceAll(/(?s).*PRELOADED_STATE__.HeaderStepStoneBlock = ([^;]+);/, '$1')?.replaceAll(/(?s)\s+/, ' ')
 			def data4		= jsonSlurper.parseText(dataRaw4 ?: "{}")
 			def dataRaw5	= jobPage?.select("script")*.html().find { it.contains("var emailLinkApplyButtonConfig") }?.replaceAll(/(?s).*var emailLinkApplyButtonConfig = ([^;]+);/, '$1')?.replaceAll(/(?s)\s+/, ' ')
@@ -175,7 +175,7 @@ class StepstoneScraper extends AWebScraper {
 			jobPage?.select("#company-hub-block-companyCard section ol > li")*.text()*.split(",")?.flatten()*.trim()?.unique()?.minus("")?.minus(null)?.each {
 				job.orgTags."${TagType.INDUSTRIES}" = (job.orgTags."${TagType.INDUSTRIES}" ?: []) + it
 			}
-			jsonSlurper.parseText(jobPage?.select("div[io.techmap.scrape.data-block=app-benefitsForListing]")?.first()?.attr("io.techmap.scrape.data-initialdata") ?: "{}")?.benefits*.benefitName?.unique()?.each {
+			jsonSlurper.parseText(jobPage?.select("div[data-block=app-benefitsForListing]")?.first()?.attr("data-initialdata") ?: "{}")?.benefits*.benefitName?.unique()?.each {
 				job.orgTags."${TagType.COMPANY_BENEFITS}" = (job.orgTags."${TagType.COMPANY_BENEFITS}" ?: []) + it
 			}
 

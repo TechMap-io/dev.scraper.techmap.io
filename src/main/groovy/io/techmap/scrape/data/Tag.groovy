@@ -1,7 +1,9 @@
 package io.techmap.scrape.data
 
+import groovy.util.logging.Log4j2
 import io.techmap.scrape.data.shared.TagType
 
+@Log4j2
 class Tag {
 	/** Raw textual name of the Tag such as "Java" */
 	String	name	= ""

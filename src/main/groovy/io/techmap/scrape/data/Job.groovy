@@ -18,8 +18,8 @@ class Job extends AMongoDbDocument {
 	/** Full JSONs spread in the page's source code (esp. from schema.org in "application/ld+json") */
 	Map			json			= [:]
 
-	/** Locale / language tag of the job ads content - not the website's language */
-	String		locale			= ""	// e.g., "de_CH" - might be lowercase (Dice)!
+	/** Locale / language tag of the job ads content! - not the website's language */
+	String		locale			= ""	// e.g., "en_US" - might be lowercase (Dice)!
 
 	/** ID the company uses internally for this job (might not always exist) */
 	String		referenceID		= ""	// ID used by the company

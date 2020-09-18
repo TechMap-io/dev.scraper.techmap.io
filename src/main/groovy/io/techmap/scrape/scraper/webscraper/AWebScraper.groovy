@@ -15,24 +15,27 @@ abstract class AWebScraper extends AScraper {
 	static MongoDBConnector db = MongoDBConnector.getInstance()
 
 	Map cookiesForThread = [:]	// used to handle cookies in multiple threads
-	final Integer	TIMEOUT		= 1000 * 60	// 60 seconds
-	final String	USER_AGENT	= "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.123 Safari/537.36"
+	static final Integer	TIMEOUT		= 1000 * 60	// 60 seconds
+	static String			USER_AGENT	= "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.123 Safari/537.36"
+
+	AWebScraper(ArrayList sources, String baseSourceID) {
+	}
 
 	/********************/
 	/* Abstract Methods */
 	/********************/
 
 	/** The main entry point to start the scraping process */
-	abstract protected int scrape();
+	abstract protected int scrape()
 
 	/** Method to handle a group of pages such as catgories, industries, or letters */
-	abstract protected int scrapePageGroup(Element group, Map status);
+	abstract protected int scrapePageGroup(Element group, Map status)
 
 	/** Method to loop over a list of pages on a paginated list of jobs */
-	abstract protected int scrapePageList(Elements jobElements, Map extraData);
+	abstract protected int scrapePageList(Elements jobElements, Map extraData)
 
 	/** Method to scrape one specific page identified by its URL */
-	abstract protected boolean scrapePage(String jobPageURL, Map extraData);
+	abstract protected boolean scrapePage(String jobPageURL, Map extraData)
 
 	/*********************************************/
 	/* Helper Methods for all Web-based Scrapers */

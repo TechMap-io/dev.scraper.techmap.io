@@ -1,7 +1,9 @@
 package io.techmap.scrape.data.shared
 
+import groovy.util.logging.Log4j2
 import org.bson.Document
 
+@Log4j2
 class Salary {
 	/** Raw textual statement on salary */
 	String text
