@@ -3,7 +3,9 @@ plugins {
     id 'application'
 }
 
+def projectName    = 'techmap-scraping-system'
 mainClassName	= 'io.techmap.scrape.Main'
+version			= '0.9.7'
 
 repositories {
     mavenCentral()
@@ -25,4 +27,22 @@ dependencies {
     compile group: 'org.slf4j',					name: 'slf4j-log4j12',							version: '1.7.30' // to suppress mongodb logs etc.
     compile group: 'org.apache.logging.log4j',	name: 'log4j-api',								version: '2.13.3'
     compile group: 'org.apache.logging.log4j',	name: 'log4j-core',								version: '2.13.3'
+}
+
+jar {
+    archiveBaseName = "$projectName"
+    archiveVersion = "$version"
+    zip64 = true
+    outputs.cacheIf { true }
+    manifest {
+        attributes (
+                "Implementation-Title": "Gradle",
+                "Implementation-Version": archiveVersion,
+                'Main-Class': "$mainClassName",
+                'Multi-Release': 'true' // needed to remove "Reflection.getCallerClass is not supported" warning in production
+        )
+    }
+    from {
+        configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
+    }
 }

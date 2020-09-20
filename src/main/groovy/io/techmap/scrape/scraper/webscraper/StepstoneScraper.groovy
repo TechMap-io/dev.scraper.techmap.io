@@ -34,6 +34,7 @@ class StepstoneScraper extends AWebScraper {
 	static final String baseSourceID = 'stepstone_'
 
 	StepstoneScraper(Integer sourceToScrape) {
+		super(sources, baseSourceID)
 		this.sourceToScrape = sourceToScrape
 		this.source = this.sources[sourceToScrape]
 		this.sourceID = this.baseSourceID + this.source.id
