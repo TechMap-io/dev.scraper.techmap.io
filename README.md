@@ -1,25 +1,27 @@
-# Introduction to this Scraping system
+# Introduction
 
 This scraping system is used to extract data from job portals such as stepstone, monster, careerbuilder, 
-etc. by iterating over categories (or industries, jobnames, etc.) and then drilling down the pagination. 
-It mainly uses JSoup to access the pages via CSS selectors.
+etc. by iterating over categories (or industries, jobnames, etc.), then drilling down the pagination and 
+finally extracting information from the job ad page. 
 
-Your task is to create a new Scraper in Groovy/Java similar to the class `StepstoneScraper.groovy` (in 
+Your task is to create a new Scraper in Groovy/Java similar to the included class `StepstoneScraper.groovy` (in 
 the directory `./src/main/io/techmap/scrape/scraper/webscraper`). You mainly need to adapt the CSS 
 selectors to for the targeted Website (as described in your Task).Try to scrape as many information as 
-possible from the page by checking the data classes `Job.groovy`, `Location.groovy`, and `Company.groovy` 
+possible from the page by checking the fields of the data classes `Job.groovy`, `Location.groovy`, and `Company.groovy` 
 (as well as the shared classes in `./src/main/io/techmap/scrape/data/shared`).
 
-To get accustomed to the system, test if the system works on your computer by executing the steps in "Executing the System" (see below)
+To get accustomed to the system, test if the system works on your computer by executing the steps in 
+"Executing the System" (see below). The system should run out-of-the-box and scrape 2 pages from the 
+Stepstone website.
 
-#### General Process:
+## General Process:
 1. Copy the class `StepstoneScraper.groovy` and rename appropriately (NOTE: the class must end with 
 `Scraper.groovy` - see `Main.scrapeSource()` that uses a classloader)
 2. Go to the website to scrape and find a list of categories, industries, sectors or jobnames the website uses to group 
 their job ads (favor industries before categories before jobnames)
 3. Adapt method `scrape()` in your Class to select the groups (i.e., categories, industries or jobnames)
    * NOTE: If the website uses multiple levels to group jobs, loop over them in the `scrape()` method and 
-   collect all `extraData` (e.g. workopolis.com uses "Job functions" and then "Job Titles" which should 
+   collect the data in the Map `extraData` (e.g. workopolis.com uses "Job functions" and then "Job Titles" which should 
    be stored in `extraData.category` and `extraData.jobname`).
 4. Adapt the CSS selectors in the method `scrapePageGroup()` to iterate through the pagination of the 
 new website. You mainly need to find the number of jobs in this group and find or construct the link 
@@ -37,8 +39,13 @@ try to identify JSON objects in the page's source code and use this data.
     JavaScript functions. The current test system does not include a headless browser to access this data.
     * NOTE: The most important JSON object is probable the Schema.org Job Posting description (look for 
     "application/ld+json" in the page's source code). See https://schema.org/JobPosting for more info.
+7. Finally, test your scarper by executing it in your IDE, shell/cli, or via docker (see "Executing the System" 
+below). 
+    * NOTE: please check at least 50 pages from different groups / industries to get a feeling for the 
+    available data on the job ad page. Sometimes job portals have different pages for job ad by own customers, 
+    scraped job ads or pages with references to PDF documents.
 
-#### Please Note:
+### Please Note:
 * No other classes than your Scraper class should be changed or added - if you find a Bug please comment 
 and send an Email or Pull Request.
 * Some classes and method might not seem to do much - this is due to the reduction from the main system - 
@@ -48,9 +55,9 @@ many methods are gutted.
 To execute the system you can run it from the shell/cli, an IDE such as IntelliJ IDEA or via a Docker container. The system takes three arguments:
 1. The first argument is used to indicate the command "scrape" (in this test system the only other command is "selftest")
 2. The second argument is used to indicate the source portal / website, e.g. "Stepstone" (it is used to identify the class - a new scraper needs a new name such as "Careerbuilder") 
-3. The third argument is used to indicate the number of pages to scrape during development you should use an IDE with debugging (e.g., IntelliJ CE) or keep the value low.
+3. The third argument is used to indicate the number of pages to scrape during development - we recommend that you use an IDE with debugging mode (e.g., IntelliJ IDEA Community) or keep this value low.
 
-#### To execute from the cli /shell:
+### To execute from the shell/cli:
 Install gradle (version 6.x), groovy (version 3.x), and Java (version 11.x) before running one of the following commands:
 * `gradle run --args=selftest` to test if the dependencies are loaded etc.
 The output should look somewhat like this:
@@ -92,14 +99,14 @@ NOTE: Please note that the scraped data is printed directly to stdout - to view 
 you can switch on `toPrettyString()` in the method `AWebScraper.crossreferenceAndSaveData()` or copy the 
 lines and use the website http://jsonviewer.stack.hu/
 
-#### To execute in IntelliJ IDEA:
-Install the plugins for Gradle and Groovy - the IntelliJ IDEA Community is sufficient (you do not need 
+### To execute in IntelliJ IDEA:
+Install the plugins for Gradle and Groovy - the IntelliJ IDEA Community Edition is sufficient (you do not need 
 to have the Ultimate edition). Add a "Gradle Task" to the Execution configuration 
 (Menu "Run" --> "Edit configurations...") and set the task to `run --args=scrape,Stepstone,2`.
-You should be able to run or debug the system.
+You should be able to run or debug the system from the menu.
 
-#### To execute with docker
+### To execute with docker
 Install docker on your system and run the following commands in the directory with the Dockerfile:
 * `docker build -t tss_test .` to build the docker image
-* docker run --memory="4g" tss_test:latest scrape Stepstone 2
+* `docker run tss_test:latest scrape Stepstone 2` to run the docker image
 
