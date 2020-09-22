@@ -1,9 +1,3 @@
-Pricing:
-* Fixed price: 25-100$ (PPO), 20-50$ (freelancer.com)
-* Hourly price: 5-13$ (Fivvr), 20-50$ (upwork), (freelancer.com)
-* Student (German, 4-8 hrs): 50-100€
-* Freelancer: 500-1500$/month (onlinejobs.ph)
----
 ## Task: Develop a Scraper for a Job Portal with our Scraping System (One Groovy / Java Class with CSS Selectors)
 
 Your task is to develop a scraper for the website [SimplyHired](https://www.simplyhired.com/) 
