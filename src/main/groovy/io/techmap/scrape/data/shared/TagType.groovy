@@ -1,3 +1,4 @@
+/* Copyright © 2020, TechMap GmbH - All rights reserved. */
 package io.techmap.scrape.data.shared
 
 enum TagType {
@@ -21,5 +22,4 @@ enum TagType {
 	TECHNOLOGY_SECTORS,
 	TOOLS,
 	WORK_TYPES
-
 }

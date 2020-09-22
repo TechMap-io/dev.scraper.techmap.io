@@ -1,3 +1,4 @@
+/* Copyright © 2020, TechMap GmbH - All rights reserved. */
 package io.techmap.scrape
 
 import groovy.util.logging.Log4j2

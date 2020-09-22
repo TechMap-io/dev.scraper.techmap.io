@@ -1,3 +1,4 @@
+/* Copyright © 2020, TechMap GmbH - All rights reserved. */
 package io.techmap.scrape.scraper
 
 import groovy.json.JsonBuilder
@@ -30,7 +31,7 @@ abstract class AScraper {
 		def myRunnable = scraper.newInstance(sourceToScrape)
 		scraper.jobsInAllSourcesCount = myRunnable.scrape()
 
-		log.info "End of scraping ${"${scraper.jobsInAllSourcesCount}".padLeft(5)} jobs in source ${myRunnable.sourceID} within " + TimeCategory.minus( new Date() , startTime )
+		log.info "End of scraping ${scraper.jobsInAllSourcesCount?.toString().padLeft(5)} jobs in source ${myRunnable.sourceID} within " + TimeCategory.minus( new Date() , startTime )
 	}
 
 	/******************/
