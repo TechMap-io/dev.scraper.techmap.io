@@ -5,12 +5,13 @@ based on our system on [Github](https://github.com/joergrech/dev.scraper.techmap
 copy the scraper for Stepstone and adapt the new Scraper to SimplyHired.
 
 #### Task Notes
+* Required Skills: Groovy or Java, CSS (Selectors), Developer Tools (Chrome, etc.)
 * Effort per scraper: approx. 4-8 hours
 * Potential for 30+ other scrapers / projects - if we like your code & productivity.
 
 #### General Steps:
 1. Checkout the Github project
-	* `git clone https://github.com/joergrech/dev.scraper.techmap.io`
+	* `git clone https://github.com/TechMap-io/dev.scraper.techmap.io`
 2. Test if the system runs on your machine
 	* see README.md
 3. Create a (feature) branch for your scraper (just use the website's name, e.g., "SimplyHired")
