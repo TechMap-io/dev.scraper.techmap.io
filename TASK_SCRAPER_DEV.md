@@ -1,7 +1,7 @@
 ## Task: Develop a Scraper for a Job Portal with our Scraping System (One Groovy / Java Class with CSS Selectors)
 
 Your task is to develop a scraper for the website [SimplyHired](https://www.simplyhired.com/)
-based on our system on [Github](https://github.com/joergrech/dev.scraper.techmap.io) - just
+based on our system on [Github](https://github.com/TechMap-io/dev.scraper.techmap.io) - just
 copy the scraper for Stepstone and adapt the new Scraper to SimplyHired.
 
 #### Task Notes
