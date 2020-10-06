@@ -136,16 +136,20 @@ class TotaljobsScraper extends AWebScraper {
 			job.name		= jobPage.select("h1.brand-font").first().text()
 
 			job.locale		= jobPage.select("meta[property=og:locale]")?.first()?.attr("content")
-			job.referenceID = jobPage.select("ul li span.reference")
-					.stream()
-					.filter(it -> it.text().contains("Reference"))
-					?.findFirst()
-					?.get()
-					?.parent()
-					?.text()
-					?.replaceAll("Reference: ", "")
-
-			job.html		= jobPage?.select("div[class^=container job-content]")?.first()?.html()
+//			job.referenceID = jobPage.select("ul li span.reference")
+//					.stream()
+//					.filter(it -> it.text().contains("Reference"))
+//					?.findFirst()
+//					?.get()
+//					?.parent()
+//					?.text()
+//					?.replaceAll("Reference: ", "")
+			// NOTE: you could have used JSoup's "Contains()" and "ownText()" feature
+			job.referenceID = jobPage.select("ul li span.reference:Contains(Reference)")?.first()?.parent()?.ownText()
+			
+//			job.html		= jobPage?.select("div[class^=container job-content]")?.first()?.html()
+			// WARN: job.html and job.text is meant to contain only the text describing the job - not the whole job ad
+			job.html		= jobPage?.select(".job-content")?.first()?.html()
 			job.text		= DataCleaner.stripHTML(job.html)
 
 			def jobScriptJsonText 	= jobPage.select("#jobPostingSchema")?.first()?.childNode(0)?.toString()?.replaceAll("\n", "")?.trim()
@@ -159,20 +163,24 @@ class TotaljobsScraper extends AWebScraper {
 			if (jobScriptJsonText) {
 				final JsonSlurper jobJsonSlurper = new JsonSlurper()
 				def jobJsonMap 				= jobJsonSlurper.parseText(jobScriptJsonText)
-				job.json.baseSalary			= jobJsonMap?.baseSalary?.value?.value
-				job.json.unitText			= jobJsonMap?.baseSalary?.value?.unitText
-				job.json.currency			= jobJsonMap?.baseSalary?.currency
-				job.json.title				= jobJsonMap?.title
-				job.json.url				= jobJsonMap?.url
-				job.json.datePosted			= jobJsonMap?.datePosted
-				job.json.industry			= jobJsonMap?.industry
-				job.json.employmentType		= jobJsonMap?.employmentType
-				job.json.hiringOrganization = jobJsonMap?.hiringOrganization?.name
-				job.json.employmentType		= jobJsonMap?.employmentType
-				job.json.jobLocation		= jobJsonMap?.jobLocation?.address?.addressLocality
+//				job.json.baseSalary			= jobJsonMap?.baseSalary?.value?.value
+//				job.json.unitText			= jobJsonMap?.baseSalary?.value?.unitText
+//				job.json.currency			= jobJsonMap?.baseSalary?.currency
+//				job.json.title				= jobJsonMap?.title
+//				job.json.url				= jobJsonMap?.url
+//				job.json.datePosted			= jobJsonMap?.datePosted
+//				job.json.industry			= jobJsonMap?.industry
+//				job.json.employmentType		= jobJsonMap?.employmentType
+//				job.json.hiringOrganization = jobJsonMap?.hiringOrganization?.name
+//				job.json.employmentType		= jobJsonMap?.employmentType
+//				job.json.jobLocation		= jobJsonMap?.jobLocation?.address?.addressLocality
+				// WARN: storing the whole json object is OK: just in case additional info is added later by the website
+				if (jobJsonMap)	job.json.schemaOrg = jobJsonMap
 
 				// some data are in json like posted date or work type
-				job.dateCreated 			= ZonedDateTime.parse("2020-10-06T08:43+10:00").toLocalDateTime()
+//				job.dateCreated 			= ZonedDateTime.parse("2020-10-06T08:43+10:00").toLocalDateTime()
+				// WARN: you used a placeholder date
+				job.dateCreated 			= ZonedDateTime.parse(jobJsonMap?.datePosted).toLocalDateTime()
 				job.position.workType		= jobJsonMap?.employmentType
 
 				address.country				= jobJsonMap?.jobLocation?.address?.addressCountry
@@ -182,7 +190,7 @@ class TotaljobsScraper extends AWebScraper {
 						"lat":jobJsonMap?.jobLocation?.geo?.latitude as Double,
 						"lng":jobJsonMap?.jobLocation?.geo?.longitude as Double
 				)
-
+// WARN: you forgot to scrape job.salary
 			}
 
 			job.position.name				= job.name
@@ -208,7 +216,7 @@ class TotaljobsScraper extends AWebScraper {
 			/**********************/
 			/* -------AND-------- */
 			/**********************/
-
+// NOTE: Not our preferred way: now the collection of data (e.g., for address or job) is all over the place
 			/*********************/
 			/* Fill Company data */
 			/*********************/
@@ -224,42 +232,56 @@ class TotaljobsScraper extends AWebScraper {
 			if (companyScriptJsonText) {
 				final JsonSlurper companyJsonSlurper = new JsonSlurper()
 				def companyJsonMap 		= companyJsonSlurper.parseText(companyScriptJsonText)
-				location.description	= companyJsonMap?.City
-				location.name			= companyJsonMap?.JobTitle
-				location.dateCreated	= job.dateCreated
+				if (companyJsonMap)	job.json.pageData = companyJsonMap
+//				location.description	= companyJsonMap?.City		// WARN: location.description is the description of the company (at that location)
+//				location.name			= companyJsonMap?.JobTitle	// WARN: location.name is the name of the company not the job
+//				location.dateCreated	= job.dateCreated			// WARN: location.dateCreated is the date the location was created in the MongoDB - it does not need to be set the the newest date of a job
 				location.idInSource		= companyJsonMap?.JobId as String
 
 				address.companyName 	= companyJsonMap?.CompanyName
-				address.addressLine 	= companyJsonMap?.City
-				address.postCode	 	= companyJsonMap?.JobPostcode
+//				address.addressLine 	= companyJsonMap?.City
+				// NOTE: address.addressLine should be the address as stated on the job ad
+				address.addressLine 	= jobPage.select(".job-summary .location")?.text() ?: data2?.City
+//				address.postCode	 	= companyJsonMap?.JobPostcode
+				// NOTE: address.postCode has two possible sources - sometime only one is used
+//				address.postCode	 	= companyJsonMap?.JobPostcode ?: jobJsonMap?.jobLocation?.address?.postalCode  // WARN: this will not work as jobJsonMap is defined in another scope
 				address.county 			= companyJsonMap?.CompanyName
 
 				location.orgAddress		= address
-				location.contacts		= [new Contact("name": jobPage.select("ul li span.reference")
-												.stream()
-												.filter(it -> it.text().contains("Contact"))
-												?.findFirst()
-												?.get()
-												?.parent()
-												?.text()
-												?.replaceAll("Contact: ", "")
-										)]
+//				location.contacts		= [new Contact("name": jobPage.select("ul li span.reference")
+//												.stream()
+//												.filter(it -> it.text().contains("Contact"))
+//												?.findFirst()
+//												?.get()
+//												?.parent()
+//												?.text()
+//												?.replaceAll("Contact: ", "")
+//										)]
+				// NOTE: you could have used JSoup's "Contains()" and "ownText()" feature - and the contact belongs to job - location will collect all contacts of all jobs over time
+				job.contact		= new Contact("name": jobPage.select("ul li span.reference:Contains(Contact)")?.first()?.parent()?.ownText())
 
 				company.idInSource	= companyJsonMap?.CompanyId
 				company.name		= companyJsonMap?.CompanyName
-				company.url 		= jobPage.select("#companyJobsLink").first()?.absUrl("href")
-				company.urls		= [("$sourceID" as String): company.url]
+//				company.url 		= jobPage.select("#companyJobsLink").first()?.absUrl("href")
+				// WARN: company.url is meant to be the company's website - e.g., https://www.hays.com
+				company.urls		= [("$sourceID" as String): jobPage.select("#companyJobsLink").first()?.absUrl("href")]
 				company.ids			= [("$sourceID" as String): company.idInSource]
 
-				job.orgTags."${TagType.COMPANY_TYPES}"		= [companyJsonMap?.SubDisciplines]
-				job.orgTags."${TagType.INDUSTRIES}"			= [companyJsonMap?.Disciplines]
+//				job.orgTags."${TagType.COMPANY_TYPES}"		= [companyJsonMap?.SubDisciplines]
+//				job.orgTags."${TagType.INDUSTRIES}"			= [companyJsonMap?.Disciplines]
+				// WARN: Disciplines and SubDisciplines are Categories
+				job.orgTags."${TagType.CATEGORIES}"			= [companyJsonMap?.Disciplines?.split("|"), companyJsonMap?.SubDisciplines?.split("|")]?.flatten()
+				job.orgTags."${TagType.COMPANY_TYPES}"		= [companyJsonMap?.CompanyType]
+//				job.orgTags."${TagType.INDUSTRIES}"			= [jobJsonMap?.industry] // WARN: this will not work as jobJsonMap is defined in another scope
+//			job.orgTags."${TagType.JOBNAMES}"			= [job.name]
+				// WARN: JOBNAME is the job category such as Accountant
+				job.orgTags."${TagType.JOBNAMES}"			= [extraData.category, companyJsonMap?.NormalisedJobTitle]
 			}
 
 			job.orgTags."${TagType.CAREER_LEVELS}"		= [job.position.careerLevel]
-			job.orgTags."${TagType.CATEGORIES}"			= [job.orgCompany.name]
+//			job.orgTags."${TagType.CATEGORIES}"			= [job.orgCompany.name]
 			job.orgTags."${TagType.CONTRACT_TYPES}"		= [job.position.contractType]
-			job.orgTags."${TagType.JOBNAMES}"			= [job.name]
-			job.orgTags."${TagType.LANGUAGES}"			= ["en"]
+//			job.orgTags."${TagType.LANGUAGES}"			= ["en"]						// WARN: LANGUAGES are languages spoken in the company (location) - not the language of the job ad
 			job.orgTags."${TagType.WORK_TYPES}"			= [job.position.workType]
 
 			/*******************/
