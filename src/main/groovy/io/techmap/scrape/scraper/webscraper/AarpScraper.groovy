@@ -125,7 +125,7 @@ class AarpScraper extends AWebScraper {
 			/*******************************/
 
 			final JsonSlurper jsonSlurper 	= new JsonSlurper()	// thread safe and serializable - alternative: new HashMap<>(jsonSlurper.parseText(jsonText))
-			def dataRaw						= jobPage?.select("script[type=application/ld+json]")?.first()?.childNode(0)?.toString()?.replaceAll("\n", "")
+			def dataRaw						= jobPage?.select("script[type=application/ld+json]")?.first()?.html()?.replaceAll("\n", "")
 			def data						= jsonSlurper.parseText(dataRaw ?: "{}")
 
 			/*****************/
