@@ -52,6 +52,16 @@ abstract class AScraper {
 		if (location && !location.isValid())	return false
 		if (job		 && !job.isValid())			return false
 
+		// Cannot convert to JSON - often has StackOverflowError
+		// print simple data
+//		println ([
+//				"source":job.source,
+//				"idInSource":job.idInSource,
+//				"url":job.url,
+//				"name":job.name,
+//				"address":job.orgAddress.addressLine,
+//				"company":job.orgCompany.name,
+//		])
 		// Print JSON lines to check output
 		println new JsonBuilder( job )//.toPrettyString()
 		// println new JsonBuilder( location )//.toPrettyString()
