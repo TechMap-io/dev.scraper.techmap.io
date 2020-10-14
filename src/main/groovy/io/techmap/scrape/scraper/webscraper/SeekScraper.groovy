@@ -138,18 +138,20 @@ class SeekScraper extends AWebScraper {
 			Job job = new Job()
 			job.source		= sourceID
 			job.idInSource	= extraData.idInSource ?: data?.jobdetails?.result?.id
-			job.url			= pageURL ?: jobPage?.select("link[rel=canonical]")?.first()?.absUrl("href")
+			job.url			= jobPage?.select("link[rel=canonical]")?.first()?.absUrl("href") ?: pageURL // NOTE: canonical URL is cleaner
 			job.name		= data?.jobdetails?.result?.title
 			job.locale		= jobPage.select("meta[property=og:locale]")?.first()?.attr("content")
 
-			job.html		= jobPage?.select("div[data-automation=job-detail-page]")?.first()?.html()
+			job.html		= jobPage?.select("div[data-automation=jobDescription]")?.first()?.html()	// NOTE: job.html only requires the jobAd description - the whole page is stored in the rawPage!
 			job.text		= DataCleaner.stripHTML(job.html)
-			job.json		= data as Map
+			job.json		= [:]
+			if (data) job.json.pageData = data // NOTE: json is a map of json objects - many website have multiple json object (especially if they use schema.org's JobPosting)
 
 			try { job.dateCreated = ZonedDateTime.parse(data?.jobdetails?.result?.listingDate)?.toLocalDateTime() } catch (e) { /*ignore*/ }
 
 			job.position.name			= job.name
 			job.position.workType		= data?.jobdetails?.result?.workType
+			
 			job.salary.text				= data?.jobdetails?.result?.salary
 			try {
 				def salaryValue				= (data?.jobdetails?.result?.salary as String)?.split("-")?.first()?.trim()?.replaceAll(",", "")
@@ -157,16 +159,19 @@ class SeekScraper extends AWebScraper {
 				salaryValue					= salaryValue ? (salaryValue?.contains(".") ?: salaryValue + ".00") : ""
 				job.salary.value			= salaryValue ? salaryValue as Double: null
 			} catch(e) {}
-			job.salary.currency			= "USD"
-			job.salary.period			= data?.jobdetails?.result?.salaryType
+//			job.salary.currency			= "USD" // ??? will be incorrect in New Zealand (nz) and Australia (au)
+			job.salary.period			= data?.jobdetails?.result?.salaryType?.replaceAll(/Package/,'')
 
 			List<Map> contactParams 			= data?.jobdetails?.result?.contactMatches
 			for (Map element: contactParams) {
-				if ((element?.type as String)?.equalsIgnoreCase("email")) job.contact.email = element?.value
-				if ((element?.type as String)?.equalsIgnoreCase("phone")) job.contact.phone = element?.value
+				if ((element?.type as String)?.equalsIgnoreCase("email"))		job.contact.email = element?.value
+				else if ((element?.type as String)?.equalsIgnoreCase("phone"))	job.contact.phone = element?.value
+				else log.warn "Unused contactParams: $element"
 			}
-
+			
 			job.orgTags."${TagType.CATEGORIES}" = (job.orgTags."${TagType.CATEGORIES}" ?: []) + extraData?.category
+			job.orgTags."${TagType.CATEGORIES}" = (job.orgTags."${TagType.CATEGORIES}" ?: []) + data?.jobdetails?.result?.classification?.description
+			job.orgTags."${TagType.CATEGORIES}" = (job.orgTags."${TagType.CATEGORIES}" ?: []) + data?.jobdetails?.result?.subClassification?.description
 			job.orgTags."${TagType.SKILLS}" 	= (job.orgTags."${TagType.SKILLS}" ?: []) + data?.jobdetails?.result?.roleRequirements
 
 			/**********************/
@@ -177,14 +182,14 @@ class SeekScraper extends AWebScraper {
 			location.source 				= sourceID
 			location.idInSource				= data?.jobdetails?.result?.locationId
 			try {
-				location.orgAddress.addressLine = jobPage.select("dd")[1]?.text()
+				location.orgAddress.addressLine = jobPage.select("dd")[1]?.text()	// WARN: selector looks to generic and can select wrong info
 			} catch (e) {
 			}
 			location.orgAddress.country 	= data?.jobdetails?.result?.locationHierarchy?.nation
 			location.orgAddress.state 		= data?.jobdetails?.result?.locationHierarchy?.state
 			location.orgAddress.city 		= data?.jobdetails?.result?.locationHierarchy?.city
 			location.orgAddress.district	= data?.jobdetails?.result?.locationHierarchy?.area
-			location.orgAddress.county		= data?.jobdetails?.result?.locationHierarchy?.suburb
+			location.orgAddress.quarter		= data?.jobdetails?.result?.locationHierarchy?.suburb	// WARN: county is an area larger than a city
 
 			/*********************/
 			/* Fill Company data */
@@ -192,11 +197,11 @@ class SeekScraper extends AWebScraper {
 
 			Company company 	= new Company()
 			company.source		= sourceID
-			company.idInSource	= data?.jobdetails?.result?.advertiser?.id
-			company.name		= data?.jobdetails?.result?.advertiser?.description
-			company.urls		= [("$sourceID" as String): ""]
+			company.idInSource	= data?.jobdetails?.result?.advertiser?.id				// WARN: data?.jobdetails?.result?.companyReview?.companyId exists too
+			company.name		= data?.jobdetails?.result?.advertiser?.description		// WARN: data?.jobdetails?.result?.companyReview?.companyName exists too
+			company.urls		= [("$sourceID" as String): ""]							// WARN: data?.jobdetails?.result?.companyReview?.companyProfileUrl exists too
 			company.ids			= [("$sourceID" as String): company.idInSource]
-
+def test = "https://www.seek.com.au/" + data?.jobdetails?.result?.companyReview?.companyProfileUrl
 			/*******************/
 			/* Store page data */
 			/*******************/
