@@ -141,10 +141,10 @@ class AarpScraper extends AWebScraper {
 			// There is no such parameter
 			job.locale		= "en_US"
 
-			job.html		= jobPage?.select("div.view-job-view")?.first()?.html()
+			job.html		= data?.description ?: jobPage?.select("div.view-job-view .text")?.first()?.html()	// NOTE: job.html only requires the jobAd description - the whole page is stored in the rawPage!
 			job.text		= DataCleaner.stripHTML(job.html)
-			job.json		= data
-			if (data)	job.json.pageData = data
+			job.json		= [:]
+			if (data)	job.json.schemaOrg = data	// Note: pageData is typically right - except for the schema.org JobPosting (which is the same over all Job Boards using it)
 
 			try { job.dateCreated = ZonedDateTime.parse(data.datePosted)?.toLocalDateTime() } catch (e) { /*ignore*/ }
 
@@ -154,11 +154,13 @@ class AarpScraper extends AWebScraper {
 			job.salary.text 	 		= (jobPage.select("div.job-stats b")[1] as String).contains("Salary") ? (jobPage.select("div.job-stats b")[1].text() + " " + (jobPage.select("div.job-stats p")[1].text())) : ""
 			job.salary.currency 		= data.baseSalary?.currency
 			job.salary.value	 		= (data.baseSalary?.value ?: data.baseSalary?.minValue) as Double
-
+			
 			job.orgTags."${TagType.CATEGORIES}" 	= (job.orgTags."${TagType.CATEGORIES}" ?: []) + extraData?.category
+			job.orgTags."${TagType.CATEGORIES}" 	= (job.orgTags."${TagType.CATEGORIES}" ?: []) + data?.industry			// NOTE: added to be save - duplicates will be removed in prod system
 			job.orgTags."${TagType.WORK_TYPES}" 	= (job.orgTags."${TagType.WORK_TYPES}" ?: []) + data.employmentType
 			job.orgTags."${TagType.QUALIFICATIONS}" = (job.orgTags."${TagType.QUALIFICATIONS}" ?: []) + data.educationRequirements
-			job.orgTags."${TagType.SKILLS}" 		= (job.orgTags."${TagType.SKILLS}" ?: []) + ((data.experienceRequirements && data.experienceRequirements != "0") ? data.data.experienceRequirements : [])
+			job.orgTags."${TagType.QUALIFICATIONS}" = (job.orgTags."${TagType.QUALIFICATIONS}" ?: []) + ((data.experienceRequirements && data.experienceRequirements != "0") ? data.experienceRequirements : null)
+			// NOTE: SKILLS are more Technologies, Tools etc. such as Java, eclipse, MS Word, ...
 
 			/**********************/
 			/* Fill Location data */
@@ -166,14 +168,14 @@ class AarpScraper extends AWebScraper {
 
 			Location location 				= new Location()
 			location.source 				= sourceID
-			location.orgAddress.addressLine = jobPage.select("div.job-stats p")?.first()?.text()
-			location.orgAddress.postCode 	= data?.jobLocation?.address?.postalCode
-			location.orgAddress.county 		= data?.jobLocation?.address?.addressCountry
+			location.orgAddress.addressLine = jobPage.select("div.job-stats b:Contains(Location)")?.first()?.nextElementSibling()?.text() // NOTE: Your old selector was too dangerous if they change order or do not have a location
+			location.orgAddress.country 	= data?.jobLocation?.address?.addressCountry
+			location.orgAddress.countryCode	= location.orgAddress.country == "United States" ? "US" : this.source.id.toString().toUpperCase()
 			location.orgAddress.state 		= data?.jobLocation?.address?.addressRegion
 			location.orgAddress.city 		= data?.jobLocation?.address?.addressLocality
+			location.orgAddress.postCode 	= data?.jobLocation?.address?.postalCode		// NOTE: just reordered from large to small
 			location.orgAddress.street 		= data?.jobLocation?.address?.streetAddress
 			location.orgAddress.houseNumber = data?.jobLocation?.address?.streetAddress ? (data?.jobLocation?.address?.streetAddress as String).split(" ").first().replaceAll("\\D", "") : ""
-			location.orgAddress.countryCode	= location.orgAddress.country == "United States" ? "US" : this.source.id.toString().toUpperCase()
 
 			/*********************/
 			/* Fill Company data */
@@ -188,10 +190,10 @@ class AarpScraper extends AWebScraper {
 			def companyLink = jobPage?.select("h4.top-company-name a.employer-link")?.first()?.absUrl("href")
 			// link redirects to AARP page with real company link, but it needs additional request
 			// not all such pages contains the link and if it's redundant - just comment this code
-			if (companyLink) {
-				def companyPage = loadPage(companyLink)
-				companyLink = companyPage.select("div[class~=company-description] a")?.last()?.absUrl("href")
-			}
+//			if (companyLink) { // NOTE: understandable but company pages are scraped by another scraper - no need here to open another page
+//				def companyPage = loadPage(companyLink)
+//				companyLink = companyPage.select("div[class~=company-description] a")?.last()?.absUrl("href")
+//			}
 
 			company.urls		= [("$sourceID" as String): companyLink]
 			company.ids			= [("$sourceID" as String): company.idInSource]
