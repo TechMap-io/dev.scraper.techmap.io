@@ -65,7 +65,8 @@ class ITJobsScraper extends AWebScraper {
 		}
 
 		// Identify groups of jobs such as categories, industries or Jobnames we can iterate over
-		def groups = allJobsPage?.select(".jp_rightside_job_categories_wrapper")?.first()?.select("a")?.sort { it.text() } // sort necessary for compare with status.lastCategory
+		def groups = allJobsPage?.select(".jp_rightside_job_categories_wrapper h4:Contains(by Category)")?.first()?.parent()?.parent()?.select("a")?.sort { it.text() } // NOTE: using Contains() to select more precise
+		// sort necessary for compare with status.lastCategory
 		
 		for (Element group in groups) {
 			def status = db.loadStatus(sourceID + "-${group.text()}")
@@ -85,21 +86,21 @@ class ITJobsScraper extends AWebScraper {
 		def nextURL = group.absUrl("href")
 		def paginationPage = loadPageWithParameters(nextURL, null)
 		
-		int maxJobsInGroup = (paginationPage?.select("h1.mnjbtit")?.text()?.replaceAll("\\D", "") ?: 0)?.toInteger()
-		
+		int maxJobsInGroup = (paginationPage?.select("#containerIntro h1")?.text()?.replaceAll("\\D", "") ?: 0)?.toInteger() // NOTE: ".mnjbtit" looks generated and could change often
+
 		int offset = 0
 		int jobsInGroupCount = 0
 		while (nextURL) {
 			// NOTE: this mechanism ready the "next" URL in a pagination - some pages might require different approaches (e.g., increasing a "page" parameter)
 			// but in this source page (as number) is added to the end of url
-			def jobLinks = paginationPage?.select("h2[class^=jbtit][class~=mb-5]")?.stream()?.map(it -> it.parent())?.collect(Collectors.toList()) as Elements
+			Elements jobLinks = paginationPage?.select("#grid a h2")*.closest("a") // NOTE: ".jbtit" looks generated and could change often
 			int jobsInJobListCount = scrapePageList(jobLinks, [category: group.text()])
 			jobsInGroupCount += jobsInJobListCount
 			log.debug "... scraped ${"$jobsInJobListCount".padLeft(4)} of ${"$maxJobsInGroup".padLeft(5)} jobs with offset $offset in group ${group.text()}"
 			if (maxDocsToPrint <= 0) break
 			// Get next URL and load page for next iteration
 			offset = Math.max(status.lastOffset as Integer ?: 0 , jobLinks.size())
-			def nextPageButtonURL = paginationPage.select("ul.pagination li a").last()
+			def nextPageButtonURL = paginationPage.select("ul.pagination li a:Contains(Next)") // NOTE: using containing text might be safer on the last page
 			nextURL = nextPageButtonURL.text().equalsIgnoreCase("next") ? nextPageButtonURL.absUrl("href") : null
 			if (nextURL) {
 				paginationPage = loadPageWithParameters(nextURL, null)
@@ -121,7 +122,7 @@ class ITJobsScraper extends AWebScraper {
 			String idInSource = jobPageURL.split("-").last()
 			if (!db.jobExists(sourceID, idInSource)) {
 				extraData.idInSource = idInSource
-				def workType = pageElement.select("ul[class~=mb-5] li")?.first()?.text()?.split(" ")?.last()
+				def workType = pageElement.select("ul li i:last-child.fa-clock-o")?.first()?.parent()?.text()?.split(" ")?.last() // WARN: only select if it is really the  last child (could be missing or first)
 				// work type can be extracted only here
 				// but it seems static value for all offers
 				extraData.workType = workType
@@ -158,10 +159,10 @@ class ITJobsScraper extends AWebScraper {
 			job.url			= pageURL ?: jobPage?.select("link[rel=canonical]")?.first()?.absUrl("href")
 			job.name		= jobPage.select("div.jp_job_des h1.ttt")?.first()?.text()
 			job.locale		= "en_US" // only hardcode - there is missed such data in page
-			job.html		= jobPage?.select("div.jp_job_des")?.first()?.html() + jobPage?.select("div[class^=jp_job_res]")?.first()?.html()
+			job.html		= jobPage?.select("div.jp_job_res")?.first()?.html() // NOTE: job.html only requires the jobAd description - the whole page is stored in the rawPage!
 			job.text		= DataCleaner.stripHTML(job.html)
 			job.json		= [:] // resource doesn't contains json data with offer details
-			def postedDate  = jobPage.select("div.jp_job_res p")?.last()?.text()
+			def postedDate  = jobPage.select("div.jp_job_res p:Contains(Posted on)")?.last()?.text() // NOTE: dangerous but lets try if all jobs
 			if (postedDate.containsIgnoreCase("Posted on :")) {
 				postedDate  = postedDate.replaceAll("Posted on :", "").trim()
 			}
@@ -189,8 +190,8 @@ class ITJobsScraper extends AWebScraper {
 			Location location 				= new Location()
 			location.source 				= sourceID
 			location.orgAddress.source 		= sourceID
-			location.orgAddress.companyName	= jobPage.select("div.jp_job_des ul li")?.first()?.text()
-			location.orgAddress.addressLine	= jobPage.select("div.jp_job_des ul li")?.last()?.text()
+			location.orgAddress.companyName	= jobPage.select("div.jp_job_des ul li i.fa-suitcase")?.first()?.parent()?.text()		// NOTE its safer to select the suitcase icon
+			location.orgAddress.addressLine	= jobPage.select("div.jp_job_des ul li i.fa-map-marker")?.first()?.parent()?.text()	// NOTE its safer to select the map icon
 			location.orgAddress.country		= "USA"
 			location.orgAddress.state		= location.orgAddress.addressLine?.split(",")?.last()?.replaceAll("\\d", "")
 			location.orgAddress.city		= location.orgAddress.addressLine?.split(",")?.first()
