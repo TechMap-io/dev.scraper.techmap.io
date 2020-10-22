@@ -154,6 +154,18 @@ class HeadhunterScraper extends AWebScraper {
 			job.position.workType		= data?.vacancyView?.get("@workSchedule")
 			job.position.contractType	= data?.vacancyView?.employment?.get("@type")
 
+			job.salary.text				= jobPage.select("p.vacancy-salary")?.first()?.text()
+			job.salary.value			= data?.vacancyView?.compensation?.from as Double
+			job.salary.value			= job.salary.value ?: data?.vacancyView?.compensation?.to as Double
+			job.salary.currency			= data?.vacancyView?.compensation?.currencyCode
+
+			job.contact.name			= data?.vacancyView?.contactInfo?.fio
+			job.contact.email			= data?.vacancyView?.contactInfo?.email
+			def phones					= data?.vacancyView?.contactInfo?.phones?.phones as List
+			if(phones) {
+				job.contact.phone		= phones[0].country + phones[0].city + phones[0].number
+			}
+
 			job.orgTags."${TagType.CATEGORIES}" = (job.orgTags."${TagType.CATEGORIES}" ?: []) + extraData?.category
 			job.orgTags."${TagType.INDUSTRIES}" = (job.orgTags."${TagType.INDUSTRIES}" ?: []) + data?.vacancyView?.specializations?.profArea?.first()?.trl
 			job.orgTags."${TagType.SKILLS}" 	= (job.orgTags."${TagType.SKILLS}" ?: []) + data?.vacancyView?.keySkills?.keySkill
