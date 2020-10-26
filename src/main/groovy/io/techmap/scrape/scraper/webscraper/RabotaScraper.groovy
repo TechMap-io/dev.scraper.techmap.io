@@ -45,11 +45,11 @@ class RabotaScraper extends AWebScraper {
 		final def startCookies = this.cookiesForThread."${Thread.currentThread().getId()}" ?: [:]
 
 		// the first page doesn't contains all groups
-		def groupPageLink = startPage.select("div*.f-additional-links-holder a")?.first()?.absUrl("href")
+		def groupPageLink = startPage.select("div.f-additional-links-holder a")?.first()?.absUrl("href")
 		def groupPage = loadPage(groupPageLink)
 
 		// Identify groups of jobs such as categories, industries or Jobnames we can iterate over
-		def groups = groupPage?.select("div*.f-rubrics-innerpaddings a*.f-visited-enable")?.sort { it.text() }
+		def groups = groupPage?.select("div.f-rubrics-innerpaddings .f-visited-enable")?.sort { it.text() }
 		
 		for (Element group in groups) {
 			def status = db.loadStatus(sourceID + "-${group.ownText()}")
@@ -80,7 +80,7 @@ class RabotaScraper extends AWebScraper {
 			log.debug "... scraped ${"$jobsInJobListCount".padLeft(4)} of ${"$maxJobsInGroup".padLeft(5)} jobs with offset $offset in group ${group.text()}"
 			
 			if (maxDocsToPrint <= 0) break
-			
+
 			// Get next URL and load page for next iteration
 			nextURL = paginationPage?.select("dd.nextbtn a")?.first()?.absUrl("href")
 			offset = Math.max((status.lastOffset as Integer) ?: 0, jobLinks?.size()?:20)
@@ -125,6 +125,9 @@ class RabotaScraper extends AWebScraper {
 			final JsonSlurper jsonSlurper = new JsonSlurper()	// thread safe and serializable - alternative: new HashMap<>(jsonSlurper.parseText(jsonText))
 			def dataRaw		= jobPage?.select("script")?.find({it?.html()?.contains("vacancy_Id")})?.html()?.replaceAll("var ruavars = |;", "")
 			def data		= jsonSlurper.parseText(dataRaw ?: "{}")
+			def data2 = jsonSlurper.parseText(jobPage?.select("script[type='application/ld+json']")?.find {
+				it.html().contains("hiringOrganization")
+			}?.html()?.trim() ?: "{}") // STrange: application/ld+json exists but is empty - maybe a programming error by rabota.ua? Recheck after some time.
 
 			/*****************/
 			/* Fill Job data */
@@ -135,28 +138,34 @@ class RabotaScraper extends AWebScraper {
 			job.idInSource	= extraData.idInSource ?: data?.vacancy_Id
 			job.url			= pageURL ?: jobPage.select("link[rel=canonical]")?.first()?.absUrl("href")
 			job.name		= data?.vacancy_Name ?: jobPage.select("h1")?.first()?.text()
-			job.html		= jobPage.select("div*.santa-bg-white")?.first()?.html()
 			job.locale		= jobPage.select("meta[property*=locale]")?.first()?.attr("content")
+			job.html		= data?.vacancy_Description ?: jobPage.select("#description-wrap,.vacancy-ssr-info")?.first()?.html() // WARN: html should only include the description
 			job.text		= DataCleaner.stripHTML(job.html)
-			job.json		= data ?: [:]
+			job.json		= [:]
+			if (data)	job.json.pageData = data
+			if (data2)	job.json.schemaOrg = data2
 
 			try { job.dateCreated 		= LocalDateTime.parse(data?.vacancy_VacancyDate) } catch (e) { /*ignore*/ }
 
 			job.position.name			= job.name
 			job.position.workType		= data?.vacancy_ScheduleName
+			job.position.careerLevel	= data?.vacancy_ExperienceName	// might not exist - not found with 1000 scraped
 
-			job.salary.text				= jobPage.select("div*.santa-bg-white p*.santa-typo-important")?.first()?.parent()?.text()
+			job.salary.text				= jobPage.select("div.santa-bg-white p.santa-typo-important")?.first()?.parent()?.text()
 			job.salary.value			= (data?.vacancy_Salary ?: 0) as Double
-			job.salary.value			= job.salary.value ?: (jobPage.select("div*.santa-bg-white p*.santa-typo-important")?.first()?.text()?.replaceAll("\\D", "") ?: 0) as Double
+			job.salary.value			= job.salary.value ?: (jobPage.select("div.santa-bg-white p.santa-typo-important")?.first()?.text()?.replaceAll("\\D", "") ?: 0) as Double
 			job.salary.currency			= "UAH"
 
 			job.contact.name 			= data?.vacancy_ContactPerson
 			job.contact.phone 			= data?.vacancy_ContactPhone
-
+			
 			job.orgTags."${TagType.CATEGORIES}" = (job.orgTags."${TagType.CATEGORIES}" ?: []) + extraData?.category
-			job.orgTags."${TagType.INDUSTRIES}" = (job.orgTags."${TagType.INDUSTRIES}" ?: []) + (data?.vacancy_AlertSynonymNames as String)?.split(",")?.toList()
+			job.orgTags."${TagType.CATEGORIES}" = (job.orgTags."${TagType.CATEGORIES}" ?: []) + data?.vacancy_BranchName
+			job.orgTags."${TagType.INDUSTRIES}" = (job.orgTags."${TagType.INDUSTRIES}" ?: []) + (data?.vacancy_AlertSynonymNames as String)?.split(",")*.trim()?.toList()
 			job.orgTags."${TagType.SKILLS}" = (job.orgTags."${TagType.SKILLS}" ?: []) + data?.vacancy_LanguageDescription
-
+			job.orgTags."${TagType.QUALIFICATIONS}" = (job.orgTags."${TagType.QUALIFICATIONS}" ?: []) + data?.vacancy_EducationName
+			job.orgTags."${TagType.LANGUAGES}" = (job.orgTags."${TagType.LANGUAGES}" ?: []) + data?.vacancy_LanguageDescription
+			
 			/**********************/
 			/* Fill Location data */
 			/**********************/
@@ -165,7 +174,8 @@ class RabotaScraper extends AWebScraper {
 			location.source 					= sourceID
 			location.orgAddress.addressLine 	= jobPage.select("span:contains(Адрес:)")?.first()?.parent()?.select("span")?.last()?.text()
 			location.orgAddress.city			= data?.vacancy_CityName
-
+			location.orgAddress.district		= jobPage.select("h5:contains(Район),h5:contains(массив)")?.first()?.parent()?.select("ul li")*.text()?.trim()?.join(" / ") // might not exist in page source - only Angular
+			
 			// street and county can be placed in different order in "addressLine" and it's impossible to find correct values
 
 			location.orgAddress.geoPoint.lat	= data?.vacancy_Latitude
@@ -178,9 +188,13 @@ class RabotaScraper extends AWebScraper {
 			Company company 	= new Company()
 			company.source		= sourceID
 			company.idInSource	= data?.vacancy_NotebookId ?: pageURL.split("company").last().split("/").first()
-			company.name		= data?.vacancy_CompanyName ?: jobPage.select("div*.mini-profile-container h3")?.first()?.text()
+			company.name		= data?.vacancy_CompanyName ?: jobPage.select("div.mini-profile-container h3")?.first()?.text()
 			company.ids			= [("$sourceID" as String): company.idInSource]
-			if (company.idInSource == "anonymous") return false // job is from anonymous company
+			company.urls		= [("$sourceID" as String): pageURL?.replaceAll(/\/vacancy.*/,'')]
+			if (company.idInSource == "anonymous") {
+				log.warn "Found anonymous company in page: $pageURL"
+				return false
+			} // job is from anonymous company
 
 			/*******************/
 			/* Store page data */
