@@ -36,7 +36,7 @@ abstract class AMongoDbDocument {
 			return false
 		}
 		if (this.name?.count("${this.name?.take(3)}") >= 2) { // find duplicate names such as "LeedsLeeds" (probably a Jsoup select problem)
-			log.error "Invalid idInSource '${this.idInSource}' for company: $this"
+			log.error "Invalid name '${this.idInSource}' for company: $this"
 			return false
 		}
 		if (this.url?.contains("@")) { // e.g., "https://E-Mail:chemnitz@accurat.eu"

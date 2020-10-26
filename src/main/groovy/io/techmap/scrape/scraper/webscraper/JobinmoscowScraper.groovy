@@ -15,6 +15,7 @@ import org.jsoup.nodes.Element
 import org.jsoup.select.Elements
 
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 @Log4j2
@@ -151,7 +152,7 @@ class JobinmoscowScraper extends AWebScraper {
 			job.idInSource	= extraData.idInSource
 			job.url			= pageURL
 			job.name		= jobPage?.select("div.vacansy div.vacansy-block h1")?.first()?.text()
-			job.html		= jobPage?.select("div.vacansy div.left")?.first()?.html()
+			job.html		= jobPage?.select(".vacansy .left .info-vacansy")?.first()?.html()	// WARN: your selector will select "other jobs" (Похожие вакансии уборщик/уборщица)
 			job.text		= DataCleaner.stripHTML(job.html)
 			job.json		= [:]
 
@@ -160,6 +161,11 @@ class JobinmoscowScraper extends AWebScraper {
 				Locale locale = new Locale("ru");
 				DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd MMMM yyyy", locale);
 				job.dateCreated 		= LocalDate.parse(dateText, formatter)?.atStartOfDay()
+			} catch (e) { /*ignore*/ }
+			try {
+				if (!job.dateCreated && jobPage?.select("p.date")?.first()?.text()?.contains("Размещено сегодня")) {
+					job.dateCreated = LocalDate.now()?.atStartOfDay()
+				}
 			} catch (e) { /*ignore*/ }
 
 			job.position.name			= job.name
@@ -189,12 +195,12 @@ class JobinmoscowScraper extends AWebScraper {
 			Location location 					= new Location()
 			location.source 					= sourceID
 			def locationElement					= jobPage.select("div.vacansy div.left-block p.city")?.first()
-			location.orgAddress.addressLine 	= locationElement?.text()
+			location.orgAddress.addressLine 	= locationElement?.text() ?: jobPage.select("div.vacansy .right-info-vacansy p b:Contains(Адрес:)")?.first()?.parent()?.ownText() // TODO: check which address is more specific - e.g. for http://www.jobinmoscow.ru/linkvac.php?link=1150202551
 
 			location.orgAddress.district		= locationElement?.select("a")?.find({it.attr("href").contains("regionid")})?.text()
 			location.orgAddress.city			= locationElement?.select("a")?.find({it.attr("href").contains("cityid")})?.text()
-			location.orgAddress.county			= locationElement?.select("a")?.find({it.attr("href").contains("srdistrict")})?.text()
-			location.orgAddress.street			= locationElement?.select("a")?.find({it.attr("href").contains("metroid")})?.text()
+			location.orgAddress.district		= locationElement?.select("a")?.find({it.attr("href").contains("srdistrict")})?.text() // NOTE: county is an area larger than a city
+			location.orgAddress.quarter			= locationElement?.select("a")?.find({it.attr("href").contains("metroid")})?.text()?.replaceAll(/^/,'метро: ')	// NOTE: not really the street - using quarter
 
 			/*********************/
 			/* Fill Company data */
@@ -204,6 +210,7 @@ class JobinmoscowScraper extends AWebScraper {
 			company.source		= sourceID
 			company.idInSource	= jobPage.select("div.vacansy div.info-vacansy div.right-info-vacansy p:contains(Работодатель) a")?.first()?.attr("href")?.replaceAll("\\D", "")
 			company.name		= jobPage.select("div.vacansy div.info-vacansy div.right-info-vacansy p:contains(Работодатель) a")?.first()?.text()
+			company.name		= company.name ?: jobPage.select("div.vacansy div.info-vacansy div.right-info-vacansy p:contains(Работодатель)")?.first()?.text()?.replaceAll(/^\s*Работодатель[:\s]+/,'') // WARN: does not necessarily has a link!
 			// internal link is present only
 			def companyLink 	= jobPage.select("div.vacansy div.info-vacansy div.right-info-vacansy p:contains(Работодатель) a")?.first()?.absUrl("href")
 			company.urls		= [("$sourceID" as String): companyLink]
