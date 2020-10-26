@@ -14,6 +14,7 @@ import org.jsoup.HttpStatusException
 import org.jsoup.nodes.Element
 import org.jsoup.select.Elements
 
+import java.time.LocalDateTime
 import java.time.ZonedDateTime
 
 @Log4j2
@@ -124,9 +125,14 @@ class SuperjobScraper extends AWebScraper {
 			/*******************************/
 
 			final JsonSlurper jsonSlurper = new JsonSlurper()	// thread safe and serializable - alternative: new HashMap<>(jsonSlurper.parseText(jsonText))
-			def dataRaw		= jobPage?.select("div*.f-test-vacancy-base-info script[type=application/ld+json]")?.last()?.html()
-			def data		= jsonSlurper.parseText(dataRaw ?: "{}")
-
+			def data = jsonSlurper.parseText(jobPage?.select("script[type='application/ld+json']")?.find {
+				it.html().contains("JobPosting")
+			}?.html()?.trim() ?: "{}") // Safer to select the JobPosting directly - they might change order or add new schemaOrg data
+			// WARN: The following JSON many infos but is VERY slow to parse (~5 minutes)! Contains company.description and company.dateCreated
+//			def data2 = jsonSlurper.parseText(jobPage?.select("script")?.find {
+//				it.html().contains("window.APP_STATE")
+//			}?.html()?.replaceAll(/(?s).*window.APP_STATE\s*=\s*/, '')?.replaceAll(/\s+/, ' ')?.trim() ?: "{}")
+			
 			/*****************/
 			/* Fill Job data */
 			/*****************/
@@ -137,11 +143,11 @@ class SuperjobScraper extends AWebScraper {
 			job.url			= pageURL ?: jobPage?.select("link[rel=canonical]")?.first()?.attr("href") ?: data?.url
 			job.name		= data?.title
 			job.locale		= jobPage.select("meta[property*=locale]")?.first()?.attr("content")
-			job.html		= jobPage?.select("div[spacing=4]>div:first-child")?.first()?.html()
+			job.html		= data?.description ?: jobPage?.select("div[spacing=4] > div:first-child")?.first()?.html()
 			job.text		= DataCleaner.stripHTML(job.html)
 			job.json		= [:]
 			if (data) {
-				job.json.pageData = data
+				job.json.schemaOrg = data
 			}
 
 			try { job.dateCreated 		= ZonedDateTime.parse(data?.datePosted)?.toLocalDateTime() } catch (e) { /*ignore*/ }
@@ -167,7 +173,7 @@ class SuperjobScraper extends AWebScraper {
 			location.source 					= sourceID
 			location.orgAddress.addressLine 	= jobPage.select("div*.f-test-address span")?.first()?.text()
 
-			location.orgAddress.district		= data?.jobLocation?.address?.addressRegion
+			location.orgAddress.county			= data?.jobLocation?.address?.addressRegion
 			location.orgAddress.city			= data?.jobLocation?.address?.addressLocality
 			location.orgAddress.street			= data?.jobLocation?.address?.streetAddress
 
@@ -182,11 +188,16 @@ class SuperjobScraper extends AWebScraper {
 			company.source		= sourceID
 			company.idInSource	= data?.identifier?.value
 			company.name		= data?.identifier?.name ?: data?.hiringOrganization?.name
-			def companyLink 	= data?.hiringOrganization?.sameAs
-			company.urls		= [("$sourceID" as String): companyLink]
+			if (!data?.hiringOrganization?.sameAs?.contains("superjob")) {
+				company.url		= data?.hiringOrganization?.sameAs // external links are more likely the company's Homepage URL
+			}
+			def companyLink 	= jobPage.select("a[href*=/clients/]")?.first()?.absUrl("href")?.replaceAll(/\?.*/,'')
+			company.urls		= [("$sourceID" as String): companyLink]	// WARN: urls should store links to company pages in job portals (url is the external HomePage)
 			company.ids			= [("$sourceID" as String): company.idInSource]
 			if (company.idInSource == "anonymous") return false // job is from anonymous company
-
+//			company.description	= data2?.entities?.company?."${company.idInSource}"?.attributes?.description
+//			try { company.dateCreated = ZonedDateTime.parse(data2?.entities?.company?."${company.idInSource}"?.attributes?.createdAt)?.toLocalDateTime() } catch (e) { /* ignore */ }
+			
 			/*******************/
 			/* Store page data */
 			/*******************/
