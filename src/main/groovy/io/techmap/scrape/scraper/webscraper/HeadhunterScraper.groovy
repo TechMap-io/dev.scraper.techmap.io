@@ -141,7 +141,7 @@ class HeadhunterScraper extends AWebScraper {
 			job.url			= pageURL ?: jobPage?.select("link[rel=canonical]")?.first()?.attr("href")
 			job.name		= data?.vacancyView?.name
 			job.locale		= data?.userTargeting?.locale
-			job.html		= jobPage?.select("div.row-content")?.last()?.select("div[class*=bloko-column_container]")?.first()?.html()
+			job.html		= jobPage?.select(".vacancy-description")?.first()?.html() // NOTE: easier selector
 			job.text		= DataCleaner.stripHTML(job.html)
 			job.json		= [:]
 			if (data) {
@@ -176,12 +176,12 @@ class HeadhunterScraper extends AWebScraper {
 
 			Location location 					= new Location()
 			location.source 					= sourceID
-			location.orgAddress.addressLine 	= jobPage.select("span[data-qa=vacancy-view-raw-address]")?.first()?.ownText()
+			location.orgAddress.addressLine 	= jobPage.select("span[data-qa=vacancy-view-raw-address]")?.first()?.text()
 			location.orgAddress.addressLine 	= location.orgAddress.addressLine ?: jobPage.select("p[data-qa=vacancy-view-location]")?.first()?.text()
 			location.orgAddress.addressLine 	= location.orgAddress.addressLine ?: data?.vacancyView?.address?.displayName
 
 			location.orgAddress.countryCode		= data?.vacancyView?.area?.get("@countryIsoCode")
-			location.orgAddress.district		= data?.vacancyView?.area?.regionName
+			location.orgAddress.county			= data?.vacancyView?.area?.regionName	// NOTE: county or state?
 			location.orgAddress.city			= data?.vacancyView?.address?.city
 			location.orgAddress.street			= data?.vacancyView?.address?.street
 			location.orgAddress.houseNumber		= data?.vacancyView?.address?.building
@@ -198,7 +198,7 @@ class HeadhunterScraper extends AWebScraper {
 			company.idInSource	= data?.vacancyView?.company?.id
 			company.name		= data?.vacancyView?.company?.visibleName ?: jobPage.select("a[data-qa=vacancy-company-name]")?.first()?.text()
 			// internal link is present only
-			def companyLink 	= jobPage.select("a[data-qa=vacancy-company-name]")?.first()?.absUrl("href")
+			def companyLink 	= jobPage.select("a[data-qa=vacancy-company-name]")?.first()?.absUrl("href")?.replaceAll(/\?.*/,'')
 			company.urls		= [("$sourceID" as String): companyLink]
 			company.ids			= [("$sourceID" as String): company.idInSource]
 			if (company.name?.find(/(?i)Jobs via StepStone/)) return false // job is from another Stepstone portal
