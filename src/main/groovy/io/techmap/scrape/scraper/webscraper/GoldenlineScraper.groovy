@@ -50,6 +50,7 @@ class GoldenlineScraper extends AWebScraper {
 
 		// Identify groups of jobs such as categories, industries or Jobnames we can iterate over
 		def groups = groupPage?.select("ul.bullets li a")?.sort { it.text() }
+		groups?.shuffle() // to randomize entry point and shallow scrape (due to captcha block) - conflicts with status
 		
 		for (Element group in groups) {
 			def status = db.loadStatus(sourceID + "-${group.text()}")
@@ -119,6 +120,11 @@ class GoldenlineScraper extends AWebScraper {
 			def jobPage = loadPage(pageURL)
 			if (!jobPage) return false
 
+			if (jobPage.select(".g-recaptcha")) { // IP-based block: happens after ~20-30 pageloads
+				log.error "Blocked with Captcha!"
+				return false
+			}
+			
 			/*******************************/
 			/* Extract data in JSON format */
 			/*******************************/
@@ -134,9 +140,9 @@ class GoldenlineScraper extends AWebScraper {
 			job.idInSource	= extraData.idInSource ?: jobPage.select("script")?.find({it.html()contains("offerId")})?.html()?.split("offerId")?.last()?.split(";")?.first()?.replaceAll("\\D", "")
 			job.url			= pageURL ?: jobPage.select("link[rel=canonical]")?.first()?.attr("href")
 			job.name		= jobPage.select("h1.o-job-title")?.first()?.text() ?: jobPage.select("p.job-ad-position")?.first()?.text()
-			// NOTE! There are three different pages with offers
-			// Try to handle every variant
-			job.html		= (jobPage?.select("div*.firm-meta-info")?.first()?.html() ?: "") + (jobPage?.select("div#main-gl-offer")?.first()?.html() ?: "") + (jobPage?.select("div#H4link_main")?.first()?.html() ?: "")
+			// NOTE! There are three different pages with offers - Try to handle every variant
+//			job.html		= (jobPage?.select("div*.firm-meta-info")?.first()?.html() ?: "") + (jobPage?.select("div#main-gl-offer")?.first()?.html() ?: "") + (jobPage?.select("div#H4link_main")?.first()?.html() ?: "")
+			job.html		= jobPage?.select("#H4link_main,#main-gl-offer,#main")?.first()?.html()	// "div*.firm-meta-info" looks corrupt, (#main was new (4th variant?))
 
 			job.text		= DataCleaner.stripHTML(job.html)
 			job.json		= [:]
@@ -148,7 +154,7 @@ class GoldenlineScraper extends AWebScraper {
 			job.salary.text				= jobPage.select("p*.job-ad-salary")?.first()?.text()
 			job.salary.value			= (jobPage.select("p*.job-ad-salary")?.first()?.text()?.split("-")?.first()?.replaceAll("\\D", "") ?: 0) as Double
 			job.salary.value			= job.salary.value ?: (jobPage.select("p*.job-ad-salary")?.first()?.text()?.split("-")?.last()?.replaceAll("\\D", "") ?: 0) as Double
-			job.salary.currency			= "PLN"
+			job.salary.currency			= job.salary.text?.contains("PLN") ? "PLN" : job.salary.text?.contains("EUR") ? "EUR" : job.salary.text?.contains("€") ? "EUR" : ""
 
 			// contact was not found
 
@@ -160,10 +166,10 @@ class GoldenlineScraper extends AWebScraper {
 
 			Location location 					= new Location()
 			location.source 					= sourceID
-			location.orgAddress.addressLine 	= jobPage.select("div.job-ad-info__item")?.first()?.text()
+			location.orgAddress.addressLine 	= jobPage.select("div.job-ad-info__item")?.first()?.text()?.replaceAll(/(?i)\s*(City|town|\/|:|Province)\s*/, ', ')?.replaceAll(/([\s,]+[\s,]+)+/,', ')?.replaceAll(/^[\s,]+|[\s,]+$/,'')	// NOTE: just cleanup for Geocoder
 
-			location.orgAddress.district		= jobPage.select("p.job-ad-regions")?.first()?.text()?.replaceAll("Province:", "")
-			location.orgAddress.city			= jobPage.select("p.job-ad-city strong")?.first()?.text()
+			location.orgAddress.state			= jobPage.select("p.job-ad-regions > span")?.first()?.text()//?.replaceAll("Province:", "") // NOTE: replace not necessary; district is smaller than city
+			location.orgAddress.city			= jobPage.select("p.job-ad-city > strong")?.first()?.text()
 
 			/*********************/
 			/* Fill Company data */
@@ -172,9 +178,17 @@ class GoldenlineScraper extends AWebScraper {
 			Company company 	= new Company()
 			company.source		= sourceID
 			company.idInSource	= jobPage.select("script")?.find({it.html()contains("offerCompanyId")})?.html()?.split("offerCompanyId")?.last()?.split(";")?.first()?.replaceAll("\\D", "")
-			company.name		= jobPage.select("a.firm-name")?.first()?.text()
-			company.ids			= [("$sourceID" as String): company.idInSource]
-			if (company.idInSource == "anonymous") return false // job is from anonymous company
+			company.name		= jobPage.select("a.firm-name")?.first()?.text() ?: jobPage.select("script")?.find({it.html()contains("offerCompany =")})?.html()?.replaceAll(/(?s).*offerCompany = '([^']+)';.*/,'$1')
+//			company.ids			= [("$sourceID" as String): company.idInSource]	// NOTE: interesting but not an ID we can find the Company-page with
+			if (!company.name || company.idInSource == "anonymous") {
+				return false
+			} // job is from anonymous company
+			def companyLink = jobPage.select(".firm-profile-box a.btn-primary")?.first()?.absUrl("href")?.replaceAll(/\/opinie\/?$/,'')
+			if (companyLink) {
+				company.idInSource	= companyLink?.replaceAll(/.*\/([^\/]+)$/,'$1')
+				company.urls		= [("$sourceID" as String): companyLink]
+				company.ids			= [("$sourceID" as String): company.idInSource]
+			}
 
 			/*******************/
 			/* Store page data */
