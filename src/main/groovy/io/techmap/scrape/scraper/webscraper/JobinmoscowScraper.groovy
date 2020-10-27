@@ -197,7 +197,7 @@ class JobinmoscowScraper extends AWebScraper {
 			def locationElement					= jobPage.select("div.vacansy div.left-block p.city")?.first()
 			location.orgAddress.addressLine 	= locationElement?.text() ?: jobPage.select("div.vacansy .right-info-vacansy p b:Contains(Адрес:)")?.first()?.parent()?.ownText() // TODO: check which address is more specific - e.g. for http://www.jobinmoscow.ru/linkvac.php?link=1150202551
 
-			location.orgAddress.district		= locationElement?.select("a")?.find({it.attr("href").contains("regionid")})?.text()
+			location.orgAddress.county			= locationElement?.select("a")?.find({it.attr("href").contains("regionid")})?.text()
 			location.orgAddress.city			= locationElement?.select("a")?.find({it.attr("href").contains("cityid")})?.text()
 			location.orgAddress.district		= locationElement?.select("a")?.find({it.attr("href").contains("srdistrict")})?.text() // NOTE: county is an area larger than a city
 			location.orgAddress.quarter			= locationElement?.select("a")?.find({it.attr("href").contains("metroid")})?.text()?.replaceAll(/^/,'метро: ')	// NOTE: not really the street - using quarter
