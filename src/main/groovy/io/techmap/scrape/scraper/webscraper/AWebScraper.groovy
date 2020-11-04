@@ -128,6 +128,68 @@ abstract class AWebScraper extends AScraper {
 		return null
 	}
 
+	/** For loading a URL with parameters and headers to get a parsed Document **/
+	// NOTE: use this methd to load page in case if previous implementation returns encoded page
+	def loadPageWithParameters = { String url, Map params ->
+		try {
+			if (Thread.currentThread().isInterrupted()) return null	// Needed to prevent "MongoInterruptedException"???
+			def response = loadResponseWithParameters(url, params)
+			def parsedDocument = response?.parse()
+			if (response.statusCode() != 200) {
+				sleep 3 * 1000 // short wait to take pressure of the target server
+				response = loadResponse(url) // retry
+				if (response.statusCode() == 200) return response?.parse()
+				log.warn "StatusCode ${response.statusCode()} for page at URL $url"
+				this.cookiesForThread."${Thread.currentThread().getId()}" = [:] // reset cookies
+				return null
+			}
+			return parsedDocument
+		} catch (java.lang.OutOfMemoryError e) {
+			log.warn "$e for URL ${url}"
+			e.printStackTrace()
+		} catch (IllegalArgumentException e) { // url is null
+			log.warn "$e for URL ${url}"
+		} catch (HttpStatusException e) {
+			if (e.statusCode == 410) log.debug "HTTP Status 410 - URL is offline: ${url}"
+			else log.warn "$e #1 for $url"
+		} catch (java.io.IOException e) {
+			if (e.toString().contains("Mark invalid")) log.debug "Mark invalid - URL is offline: ${url}"
+			else log.warn "$e #2 for $url"
+		} catch (ConnectException e) {
+			log.warn "$e for URL ${url}"
+		} catch (UnknownHostException e) {
+			log.warn "$e for URL ${url} - Sleep for 0"
+		} catch (e) {
+			log.warn "$e for URL ${url} - Sleep for 0"
+		}
+		return null
+	}
+
+	def loadResponseWithParameters = { String url, Map params ->
+		if (Thread.currentThread().isInterrupted()) return null	// Needed to prevent "MongoInterruptedException"???
+		def cookies = this.cookiesForThread."${Thread.currentThread().getId()}" ?: [:]
+		if (params.urlParams) {
+			if (url.contains("?")) {
+				url += "&"
+			} else {
+				url += "?"
+			}
+			url += (params.urlParams as Map).entrySet().join("&")
+		}
+		def response = Jsoup.connect(url)
+				.timeout(TIMEOUT)
+				.userAgent(USER_AGENT)
+				.followRedirects(true)
+				.ignoreContentType(true)
+				.ignoreHttpErrors(true)
+				.headers(params.headers ?: [:])
+		if (!cookies) response = response.referrer("https://www.google.com/")
+		response = response.execute()
+		def newCookies = response.cookies()
+		if (newCookies) this.cookiesForThread."${Thread.currentThread().getId()}" = (cookies ?: [:]) + newCookies
+		return response
+	}
+
 	/** For loading JSON, XML, etc. **/
 	def loadParseable = { url, payload ->
 		try {
