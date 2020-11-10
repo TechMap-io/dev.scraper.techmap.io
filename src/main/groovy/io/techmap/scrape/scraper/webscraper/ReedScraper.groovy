@@ -1,6 +1,8 @@
 /* Copyright © 2020, TechMap GmbH - All rights reserved. */
 package io.techmap.scrape.scraper.webscraper
 
+import groovy.json.JsonParserType
+import groovy.json.JsonSlurper
 import groovy.time.TimeCategory
 import groovy.util.logging.Log4j2
 import io.techmap.scrape.data.Company
@@ -8,6 +10,7 @@ import io.techmap.scrape.data.Job
 import io.techmap.scrape.data.Location
 import io.techmap.scrape.data.shared.TagType
 import io.techmap.scrape.helpers.DataCleaner
+import org.apache.groovy.json.internal.JsonParserLax
 import org.bson.Document
 import org.jsoup.HttpStatusException
 import org.jsoup.nodes.Element
@@ -119,9 +122,13 @@ class ReedScraper extends AWebScraper {
 
 			// Json data was not fond
 
-//			final JsonSlurper jsonSlurper = new JsonSlurper()	// thread safe and serializable - alternative: new HashMap<>(jsonSlurper.parseText(jsonText))
-//			def dataRaw		= jobPage?.select("script")*.html()
-//			def data		= jsonSlurper.parseText(dataRaw ?: "{}")
+			final JsonSlurper jsonSlurper = new JsonSlurper(type: JsonParserType.LAX)	// thread safe and serializable - alternative: new HashMap<>(jsonSlurper.parseText(jsonText))
+			def dataRaw		= jobPage?.select("script")?.find({it?.html()?.contains("pageCategory")})?.html()
+					?.replaceAll(/(?s)}\);.*/,'}')
+					?.replaceAll(/(?s).*dataLayer.push\(/,'')
+					?.replaceAll(/\s+/, ' ')
+					?.trim()
+			def data		= jsonSlurper.parseText(dataRaw ?: "{}")
 
 			/*****************/
 			/* Fill Job data */
@@ -133,10 +140,10 @@ class ReedScraper extends AWebScraper {
 			job.url			= jobPage?.select("link[rel=canonical]")?.first()?.attr("href") ?: pageURL
 			job.name		= jobPage.select(".job-header h1")?.first()?.text()
 
-			job.html		= jobPage?.select("div[class=col-lg-12]")?.first()?.html()
+			job.html		= jobPage?.select(".description-container [itemprop=description]")?.first()?.html()
 			job.text		= DataCleaner.stripHTML(job.html)
 			job.json		= [:] // NOTE: any json was not found
-
+			if (data)	job.json.pageData	= data
 
 			job.position.name			= job.name
 			def jobTypesRow				= jobPage.select("span[data-qa=jobTypeLbl]")?.first()?.text()
@@ -154,9 +161,18 @@ class ReedScraper extends AWebScraper {
 			job.salary.value			= job.salary.value ?: jobPage.select("span[itemprop=baseSalary] meta[itemprop=maxValue]")?.first()?.attr("content") as Double
 			job.salary.period			= jobPage.select("span[itemprop=baseSalary] meta[itemprop=unitText]")?.first()?.attr("content")
 			job.salary.currency			= jobPage.select("span[itemprop=baseSalary] meta[itemprop=currency]")?.first()?.attr("content")
-
-			job.orgTags."${TagType.CATEGORIES}" = (job.orgTags."${TagType.CATEGORIES}" ?: []) + extraData?.category
-			job.orgTags."${TagType.INDUSTRIES}" = (job.orgTags."${TagType.INDUSTRIES}" ?: []) + jobScriptText?.split("jobSector: '")?.last()?.split("'")?.first()
+			
+			job.orgTags."${TagType.CATEGORIES}" = (job.orgTags."${TagType.CATEGORIES}" ?: []) + extraData?.category?.replaceAll(/\s*(jobs)\s*$/,'')
+			job.orgTags."${TagType.CATEGORIES}" = (job.orgTags."${TagType.CATEGORIES}" ?: []) + data?.jobKnowledgeDomain
+//			job.orgTags."${TagType.INDUSTRIES}" = (job.orgTags."${TagType.INDUSTRIES}" ?: []) + jobScriptText?.split("jobSector: '")?.last()?.split("'")?.first()
+			job.orgTags."${TagType.INDUSTRIES}" = (job.orgTags."${TagType.INDUSTRIES}" ?: []) + data?.jobSector
+			job.orgTags."${TagType.INDUSTRIES}" = (job.orgTags."${TagType.INDUSTRIES}" ?: []) + data?.jobParentSector
+			job.orgTags."${TagType.JOBNAMES}" = (job.orgTags."${TagType.JOBNAMES}" ?: []) + data?.jobOccupationL1
+			job.orgTags."${TagType.JOBNAMES}" = (job.orgTags."${TagType.JOBNAMES}" ?: []) + data?.jobOccupationL2
+			job.orgTags."${TagType.JOBNAMES}" = (job.orgTags."${TagType.JOBNAMES}" ?: []) + data?.jobOccupationL3
+			job.orgTags."${TagType.JOBNAMES}" = (job.orgTags."${TagType.JOBNAMES}" ?: []) + data?.jobOccupationL4
+			job.orgTags."${TagType.JOBNAMES}" = (job.orgTags."${TagType.JOBNAMES}" ?: []) + data?.jobOccupationL5
+			job.orgTags."${TagType.JOBNAMES}" = (job.orgTags."${TagType.JOBNAMES}" ?: []) + data?.jobOccupationL6
 
 			/**********************/
 			/* Fill Location data */
@@ -164,11 +180,11 @@ class ReedScraper extends AWebScraper {
 
 			Location location = new Location()
 			location.source = sourceID
-			location.orgAddress.addressLine = jobPage.select("#jobCountry")?.first()?.parent()?.text()
+			location.orgAddress.addressLine = jobPage.select("#jobCountry")?.first()?.parent()?.text() ?: data?.jobLocation
 			location.orgAddress.countryCode = jobPage.select("meta[itemprop=addressCountry]")?.attr("content")
 			location.orgAddress.country 	= jobPage.select("#jobCountry")?.first()?.attr("Value")
-			location.orgAddress.district 	= jobPage.select("span[data-qa=localityLbl]")?.text()
-			location.orgAddress.district 	= location.orgAddress.district ?: jobPage.select("meta[itemprop=addressRegion]")?.first()?.attr("content")
+			location.orgAddress.county 		= jobPage.select("span[data-qa=localityLbl]")?.text()
+			location.orgAddress.county 		= location.orgAddress.county ?: jobPage.select("meta[itemprop=addressRegion]")?.first()?.attr("content")
 			location.orgAddress.city 		= jobPage.select("span[data-qa=regionLbl]")?.first()?.text()
 			location.orgAddress.postCode 	= jobPage.select("meta[itemprop=postalCode]")?.first()?.attr("content")
 
@@ -178,9 +194,9 @@ class ReedScraper extends AWebScraper {
 
 			Company company = new Company()
 			company.source		= sourceID
-			def companyLink 	= jobPage.select("a[data-gtm-value=recruiter_name_click]")?.first()?.absUrl("href")
+			def companyLink 	= jobPage.select("a[data-gtm-value=recruiter_name_click]")?.first()?.absUrl("href")?.replaceAll(/\?.*/,'') // WARN: might contain parameters such as 'jobId'
 			company.idInSource	= companyLink ? companyLink.split("\\?")?.first()?.split("/")?.last()?.replaceAll("\\D", "") : ""
-			company.name		= jobPage.select("a[data-gtm-value=recruiter_name_click]")?.first()?.text()
+			company.name		= jobPage.select("a[data-gtm-value=recruiter_name_click]")?.first()?.text() ?: data?.jobRecruiterName
 
 			company.urls		= [("$sourceID" as String): companyLink]
 			company.ids			= [("$sourceID" as String): company.idInSource]
