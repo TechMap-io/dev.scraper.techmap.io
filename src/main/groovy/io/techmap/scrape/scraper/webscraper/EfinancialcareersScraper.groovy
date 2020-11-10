@@ -68,7 +68,7 @@ class EfinancialcareersScraper extends AWebScraper {
 		def startPage = loadPage("${source.url}")
 		final def startCookies = this.cookiesForThread."${Thread.currentThread().getId()}" ?: [:]
 
-		// yhe first page contains only part of groups
+		// the first page contains only part of groups
 		def groupPageLink = startPage.select("#job-sectors-list div.view-all a")?.first()?.absUrl("href")
 		def groupPage = loadPage(groupPageLink)
 
@@ -125,7 +125,7 @@ class EfinancialcareersScraper extends AWebScraper {
 		int jobsInPageCount = 0
 		for (pageElement in pageElements) {
 			String jobPageURL = pageElement?.absUrl("href")
-			String idInSource = jobPageURL?.split(".id0")?.last()
+			String idInSource = jobPageURL?.replaceAll(/.*\.id(\d+)$/,'$1') // WARN: split at ".id0" might swallow the "0" - and later a "1"?
 			if (!db.jobExists(sourceID, idInSource)) {
 				extraData.idInSource = idInSource
 				if (scrapePage(jobPageURL, extraData)) jobsInPageCount++
@@ -164,11 +164,11 @@ class EfinancialcareersScraper extends AWebScraper {
 
 			job.locale		= jobPage?.select("script")?.find({it?.html()?.contains("efcLocale")})?.html()?.split("\"efcLocale\":\"")?.last()?.split("\",\"")?.first()
 
-			job.html		= jobPage?.select("div[class=container]")?.first()?.html()
+			job.html		= data2?.description ?: jobPage?.select(".jobContentFrame")?.first()?.html()
 			job.text		= DataCleaner.stripHTML(job.html)
 			job.json		= [:]
-			if (data)	job.json.pageData = data
-			if (data2)	job.json.pageData2 = data2
+			if (data)	job.json.pageData	= data
+			if (data2)	job.json.schemaOrg	= data2
 
 			try {
 				job.dateCreated 			= ZonedDateTime.parse(data2?.datePosted, DateTimeFormatter.ofPattern( "EEE MMM d HH:mm:ss zzz yyyy" , Locale.US))?.toLocalDateTime()
@@ -186,6 +186,18 @@ class EfinancialcareersScraper extends AWebScraper {
 
 			job.orgTags."${TagType.CATEGORIES}" = (job.orgTags."${TagType.CATEGORIES}" ?: []) + extraData?.category
 			job.orgTags."${TagType.INDUSTRIES}" = (job.orgTags."${TagType.INDUSTRIES}" ?: []) + data?.jobSector
+			if (data2?.skills) {
+				job.orgTags."${TagType.SKILLS}" = (job.orgTags."${TagType.SKILLS}" ?: []) + data2?.skills?.split(',')*.trim()
+			}
+			if (data2?.educationRequirements) {
+				job.orgTags."${TagType.QUALIFICATIONS}" = (job.orgTags."${TagType.QUALIFICATIONS}" ?: []) + data2?.educationRequirements?.split(',')*.trim()
+			}
+			if (data2?.experienceRequirements) {
+				job.orgTags."${TagType.QUALIFICATIONS}" = (job.orgTags."${TagType.QUALIFICATIONS}" ?: []) + data2?.experienceRequirements?.split(',')*.trim()
+			}
+			if (data2?.occupationalCategory) {
+				job.orgTags."${TagType.CATEGORIES}" = (job.orgTags."${TagType.CATEGORIES}" ?: []) + data2?.occupationalCategory?.split(',')*.trim()
+			}
 
 			/**********************/
 			/* Fill Location data */
@@ -211,9 +223,10 @@ class EfinancialcareersScraper extends AWebScraper {
 
 			Company company = new Company()
 			company.source		= sourceID
-			company.idInSource	= (data2?.url as String)?.split(".br0")?.last()
+			company.idInSource	= (data2?.url as String)?.replaceAll(/.*\.br(\d+)$/,'$1')
 			company.name		= data?.companyName ?: data2?.hiringOrganization?.name
 			company.name		= company.name ?: jobPage.select("#jobDetailStrickyScrollUnderDiv div[class=col] strong")?.first()?.text()
+			company.description	= jobPage.select(".font-weight-bold:Contains(Company Overview)")?.first()?.parent()?.text()
 			// only internal with offers
 			def companyLink 	= data2?.url
 			company.urls		= [("$sourceID" as String): companyLink]
