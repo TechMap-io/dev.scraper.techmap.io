@@ -154,16 +154,17 @@ class BritishjobsScraper extends AWebScraper {
 			job.idInSource	= extraData.idInSource ?: data2?.JOB_ID
 			job.url			= pageURL ?: jobPage?.select("link[rel=canonical]")?.first()?.attr("href") ?: data?.url
 			job.name		= data?.title ?: data2?.JOB_TITLE
+			job.referenceID	= jobPage?.select(".job__details-term:Contains(Job Reference)")?.first()?.parent()?.select(".job__details-value")?.text()
 
 			// what does it mean "language tag of the job ads content! - not the website's language" ?
 			// for this source it's the same - we have only one source
 			job.locale		= jobPage.select("html")?.first()?.attr("lang")
 
-			job.html		= jobPage?.select(".job--standard")?.first()?.html()
+			job.html		= data?.description ?: jobPage?.select(".job__description")?.first()?.html()
 			job.text		= DataCleaner.stripHTML(job.html)
 			job.json		= [:]
-			if (data)	job.json.pageData = data
-			if (data2)	job.json.pageData2 = data2
+			if (data)	job.json.schemaOrg = data
+			if (data2)	job.json.pageData = data2
 
 			try { job.dateCreated = ZonedDateTime.parse(data?.datePosted)?.toLocalDateTime() } catch (e) { /*ignore*/ }
 
