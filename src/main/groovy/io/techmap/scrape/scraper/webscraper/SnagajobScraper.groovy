@@ -25,7 +25,7 @@ class SnagajobScraper extends AWebScraper {
      * Normally the oldest source will be selected - in this test environment only the first is used
      **/
     static final ArrayList sources = [
-            [id: "us", url: "https://www.snagajob.com"]
+            [id: "us", url: "https://www.snagajob.com/jobs-by/industry"]
     ]
     static final String baseSourceID = 'snagajob_'
 
@@ -43,33 +43,16 @@ class SnagajobScraper extends AWebScraper {
 
         Integer jobsInSourceCount = 0
 
-        // NOTE: to load page correctly do not use old method, it returns encoded page that cannot be parsed
-        def startPage = loadPageWithParameters("${source.url}", [:])
+		def startPage = loadPage("${source.url}")
         final def startCookies = this.cookiesForThread."${Thread.currentThread().getId()}" ?: [:]
+	
+		def groups = startPage.select(".industries > div > a")?.sort { it.text() } // sort necessary for compare with status.lastCategory
 
-        // The first page doesn't contain groups
-        final JsonSlurper jsonSlurper = new JsonSlurper()
-        def searchPageScript = startPage.select("script[type=application/ld+json]")?.find({ it.html().contains("SearchAction") })?.html()
-        def searchData = jsonSlurper.parseText(searchPageScript)
-        def searchLink = (searchData?.potentialAction?.target as String)?.split("/q-")?.first()
-        def searchPage = loadPageWithParameters(searchLink, [:])
-
-        // Identify groups of jobs such as categories, industries or Jobnames we can iterate over
-        def parametersScript = searchPage.select("script#seeker-state")?.html()?.replaceAll("&q;", "\"")?.replaceAll("&a;", "&")
-        def parametersData = jsonSlurper.parseText(parametersScript)
-        def groupSearchParams = parametersData?.values()?.find({ it.body.filterGroups })?.body?.filterGroups?.find({ it.name == "Industry" })
-        def groups = groupSearchParams?.list?.sort { it?.name } // sort necessary for compare with status.lastCategory
-
-        for (Map group in groups) {
-            def status = db.loadStatus(sourceID + "-${group.name}")
-            this.cookiesForThread."${Thread.currentThread().getId()}" = startCookies
-            // this resource cannot be parsed by old way
-            // there are a lot of scripts and json data(with search parameters) to get next links and content
-            group += [  searchLink: searchLink,
-                        urlParams: [
-                            "${groupSearchParams.value}" : group.value]]
-            int jobsInCategoryCount = scrapePageGroupWithParameters(group, status)
-            jobsInSourceCount += jobsInCategoryCount
+        for (group in groups) {
+			def status = db.loadStatus(sourceID + "-${group.text()}")
+			this.cookiesForThread."${Thread.currentThread().getId()}" = startCookies
+			int jobsInCategoryCount = scrapePageGroup(group, status)
+			jobsInSourceCount += jobsInCategoryCount
             if (maxDocsToPrint <= 0) break
         }
         return jobsInSourceCount
@@ -77,15 +60,11 @@ class SnagajobScraper extends AWebScraper {
 
     @Override
     int scrapePageGroup(Element group, Map status) {
-        return 0
-    }
-
-    int scrapePageGroupWithParameters(Map group, Map status) {
         def startTime = new Date()
-        log.debug "... starting to scrape group ${group.name}"
-
-        def nextURL         = group.searchLink
-        def paginationPage  = loadPageWithParameters(nextURL, [urlParams: group.urlParams])
+        log.debug "... starting to scrape group ${group.text()}"
+	
+		def nextURL = group.absUrl("href")
+		def paginationPage = loadPage(nextURL)
 
         int maxJobsInGroup = (paginationPage?.select("h1.results-heading")?.text()?.replaceAll("\\D", "") ?: 0)?.toInteger()
 
@@ -94,7 +73,7 @@ class SnagajobScraper extends AWebScraper {
         while (nextURL) {
             // NOTE: this mechanism ready the "next" URL in a pagination - some pages might require different approaches (e.g., increasing a "page" parameter)
             def jobLinks = paginationPage?.select("job-overview[itemprop=itemListElement] meta[itemprop=url]")
-            int jobsInJobListCount = scrapePageList(jobLinks, [category: group.name])
+            int jobsInJobListCount = scrapePageList(jobLinks, [category: group.text()])
             jobsInGroupCount += jobsInJobListCount
             log.debug "... scraped ${"$jobsInJobListCount".padLeft(4)} of ${"$maxJobsInGroup".padLeft(5)} jobs with offset $offset in group ${group.text()}"
 
@@ -103,9 +82,9 @@ class SnagajobScraper extends AWebScraper {
 
             // Get next URL and load page for next iteration
             offset = Math.max(status.lastOffset ?: 0, jobLinks.size() ?: 15)?.toInteger()
-            nextURL = paginationPage?.select("a:contains(Next)")?.first()?.absUrl("href")
+            nextURL = paginationPage?.select("noscript a:Contains(Next)")?.first()?.absUrl("href")
             if (nextURL) {
-                paginationPage = loadPageWithParameters(nextURL, [urlParams: group.urlParams])
+                paginationPage = loadPage(nextURL)
                 status.lastOffset = offset
                 db.saveStatus(status)
             }
@@ -135,7 +114,7 @@ class SnagajobScraper extends AWebScraper {
     @Override
     boolean scrapePage(String pageURL, Map extraData) {
         try {
-            def jobPage = loadPageWithParameters(pageURL, [:])
+            def jobPage = loadPage(pageURL)
             if (!jobPage) return false
 
             /*******************************/
@@ -145,7 +124,12 @@ class SnagajobScraper extends AWebScraper {
             final JsonSlurper jsonSlurper = new JsonSlurper()
             def dataRaw = jobPage?.select("script")?.find({it.html().contains("JobPosting")})?.html()
             def data = jsonSlurper.parseText(dataRaw ?: "{}")
-
+			def dataRaw2 = jobPage?.select("script#seeker-state")?.first()?.html()?.replaceAll(/\&q;/,'"')
+			def data2 = jsonSlurper.parseText(dataRaw2 ?: "{}").entrySet().iterator().next().getValue().body
+			if (data2?.isHoneypot) {
+				sleep 1	// WARN: looks like this is a Honeypot to identify scrapers - but the flag is only visible after loading and snagajob blocks after ~20 pages (but unblocks after 19 blocka ???)
+			}
+			
             /*****************/
             /* Fill Job data */
             /*****************/
@@ -154,28 +138,37 @@ class SnagajobScraper extends AWebScraper {
             job.source      = sourceID
             job.idInSource  = extraData.idInSource ?: jobPage.select("div.posting-details span[class=ng-star-inserted]")?.first()?.text()?.replaceAll("\\D", "")
             job.url         = pageURL ?: data?.url
-            job.name        = data?.title ?: jobPage.select("h2.h1")?.first()?.text()
+            job.name        = data?.title ?: data2?.title ?: jobPage.select("h2.h1")?.first()?.text()
 
-            job.html = jobPage?.select("job-details")?.first()?.html()
+            job.html = jobPage?.select("jobs-description")?.first()?.html() ?: data2.description ?: data2.postingOverview
             job.text = DataCleaner.stripHTML(job.html)
             job.json = [:]
-            if (data) job.json.pageData = data
-
-            try {
-                job.dateCreated = ZonedDateTime.parse(data?.datePosted)?.toLocalDateTime()
-                job.dateCreated = job.dateCreated ?: LocalDate.parse(jobPage.select("div.posting-details span.divider")?.last()?.text()?.replaceAll("\\D", ""), "yyyyMMdd").atStartOfDay()
-            } catch (e) { /*ignore*/ }
+            if (data)	job.json.schemaOrg	= data
+			if (data2)	job.json.pageData	= data2
+			
+            try { job.dateCreated = ZonedDateTime.parse(data?.datePosted)?.toLocalDateTime() } catch (e) { /*ignore*/ }
+			try { job.dateCreated = job.dateCreated ?: ZonedDateTime.parse(data2?.internalCreateDate)?.toLocalDateTime()} catch (e) { /*ignore*/ }
+			try { job.dateCreated = job.dateCreated ?: LocalDate.parse(jobPage.select("div.posting-details span.divider")?.last()?.text()?.replaceAll("\\D", ""), "yyyyMMdd").atStartOfDay() } catch (e) { /*ignore*/ }
+			try { job.datesUpdated += ZonedDateTime.parse(data2?.internalUpdateDate)?.toLocalDateTime()} catch (e) { /*ignore*/ }
 
             job.position.name           = job.name
             job.position.workType       = jobPage.select("job-details i.icon-time")?.first()?.parent()?.text() ?: data?.employmentType
 
-            job.salary.text             = jobPage.select("#estimatedWage")?.first()?.text()
-            job.salary.currency         = data?.estimatedSalary?.get(0)?.currency
-            job.salary.value            = data?.estimatedSalary?.get(0)?.minValue
-            job.salary.value            = job.salary.value ?: data?.estimatedSalary?.get(0)?.maxValue
+            job.salary.text             = data2?.wage?.text // NOTE: estimates are too dangerous
+            job.salary.currency         = data2?.wage?.currency ?: data?.estimatedSalary?.get(0)?.currency
+            job.salary.value            = data2?.wage?.value	?: data2?.wage?.median
+			job.salary.value            = job.salary.value		?: data2?.wage?.minimum ?: data?.estimatedSalary?.get(0)?.minValue
+			job.salary.value            = job.salary.value		?: data2?.wage?.maximum ?: data?.estimatedSalary?.get(0)?.maxValue
             job.salary.period           = data?.estimatedSalary?.get(0)?.unitText
-
-            job.orgTags."${TagType.CATEGORIES}" = (job.orgTags."${TagType.CATEGORIES}" ?: []) + extraData?.category
+	
+			job.orgTags."${TagType.CATEGORIES}"	= (job.orgTags."${TagType.CATEGORIES}" ?: [])	+ extraData?.category
+			job.orgTags."${TagType.INDUSTRIES}"	= (job.orgTags."${TagType.INDUSTRIES}" ?: [])	+ data2?.primaryIndustryName
+			job.orgTags."${TagType.INDUSTRIES}"	= (job.orgTags."${TagType.INDUSTRIES}" ?: [])	+ data2?.industries
+			job.orgTags."${TagType.JOBNAMES}"	= (job.orgTags."${TagType.JOBNAMES}" ?: [])		+ data2?.titleNormalized
+			job.orgTags."${TagType.JOBNAMES}"	= (job.orgTags."${TagType.JOBNAMES}" ?: [])		+ data2?.seoJobTitle
+			job.orgTags."${TagType.COMPANY_BENEFITS}"	= (job.orgTags."${TagType.COMPANY_BENEFITS}" ?: [])		+ data2?.qualifications?.jobBenefits
+			job.orgTags."${TagType.QUALIFICATIONS}"		= (job.orgTags."${TagType.QUALIFICATIONS}" ?: [])		+ data2?.qualifications?.jobRequirements
+			job.orgTags."${TagType.KEYWORDS}"		= (job.orgTags."${TagType.KEYWORDS}" ?: [])		+ data2?.fextures*.name // NOTE: "fextures" is not a misspelling!
 
             /**********************/
             /* Fill Location data */
@@ -183,14 +176,15 @@ class SnagajobScraper extends AWebScraper {
 
             Location location = new Location()
             location.source = sourceID
-            location.orgAddress.addressLine     = jobPage.select("job-details i.icon-location")?.first()?.parent()?.parent()?.text()
+            location.orgAddress.addressLine     = jobPage.select("job-details i.icon-location")?.first()?.parent()?.parent()?.text() ?: data2?.location?.locationName
             location.orgAddress.countryCode     = data?.jobLocation?.address?.addressCountry?.name
-            location.orgAddress.state           = data?.jobLocation?.address?.addressRegion
-            location.orgAddress.city            = data?.jobLocation?.address?.addressLocality
+            location.orgAddress.state           = data?.jobLocation?.address?.addressRegion		?: data2?.location?.stateProvince ?: data2?.location?.stateProvinceCode
+            location.orgAddress.city            = data?.jobLocation?.address?.addressLocality	?: data2?.location?.city
             location.orgAddress.street          = data?.jobLocation?.address?.streetAddress
-            location.orgAddress.postCode        = data?.jobLocation?.address?.postalCode
-            location.orgAddress.geoPoint.lat    = data?.jobLocation?.geo?.latitude as Double
-            location.orgAddress.geoPoint.lng    = data?.jobLocation?.geo?.longitude as Double
+			location.orgAddress.postCode        = data?.jobLocation?.address?.postalCode		?: data2?.location?.postalCode
+			location.orgAddress.street        	= data2?.location?.addressLine1
+            location.orgAddress.geoPoint.lat    = (data?.jobLocation?.geo?.latitude				?: data2?.latitude)		as Double
+            location.orgAddress.geoPoint.lng    = (data?.jobLocation?.geo?.longitude			?: data2?.longitude)	as Double
 
             /*********************/
             /* Fill Company data */
@@ -198,10 +192,11 @@ class SnagajobScraper extends AWebScraper {
 
             Company company     = new Company()
             company.source      = sourceID
-            company.name        = data?.hiringOrganization?.name ?: jobPage.select("job-details .company-name")?.first()?.text()
-
+			company.url        	= data?.hiringOrganization?.url
+			company.name        = data?.hiringOrganization?.name ?: jobPage.select("job-details .company-name")?.first()?.text()
+			def companyLink = jobPage.select("job-details .company-name")?.first()?.parent()?.absUrl("href")
             company.urls = [("$sourceID" as String): companyLink]
-            company.ids  = [("$sourceID" as String): company.idInSource] // no company id was found
+            company.ids  = [("$sourceID" as String): companyLink?.replaceAll(/.*\/company\/([^\/\?]+)/,'$1')]
 
             /*******************/
             /* Store page data */

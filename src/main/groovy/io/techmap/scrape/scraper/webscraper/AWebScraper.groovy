@@ -58,7 +58,7 @@ abstract class AWebScraper extends AScraper {
 				.timeout(TIMEOUT)
 				.userAgent(USER_AGENT)
 				.header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
-				.header("Accept-Encoding", "gzip, deflate, br")
+//				.header("Accept-Encoding", "gzip, deflate, br")
 				.header("Accept-Language", "en-US,en;q=0.9,de;q=0.8,es;q=0.7")
 				.header("Cache-Control", "no-cache") // for Monster.at
 				.header("Connection", "keep-alive") // for Monster.at
