@@ -20,10 +20,17 @@ class MongoDBConnector {
 	/***********************/
 	/* Job related Methods */
 	/***********************/
-
+	
 	/** Tests if the job was already scraped (and exists in the DB)
 	 **/
 	Boolean jobExists(String sourceID, String idInSource) {
+		// NOTE: the method was gutted / is a stub
+		return false
+	}
+	
+	/** Tests if the job was already scraped (and exists in the DB)
+	 **/
+	Boolean companyExists(String sourceID, String idInSource) {
 		// NOTE: the method was gutted / is a stub
 		return false
 	}

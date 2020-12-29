@@ -64,7 +64,7 @@ abstract class AScraper {
 		if (job		 && !job.isValid())			return false
 
 		// Print JSON lines to check output
-		println new JsonBuilder( job )//.toPrettyString()
+		println new JsonBuilder( job ?: company )//.toPrettyString()
 		// println new JsonBuilder( location )//.toPrettyString()
 		// println new JsonBuilder( company )//.toPrettyString()
 		if (--maxDocsToPrint <= 0) throw new ShutdownException("Reached maxDocsToPrint: shutting down system.")

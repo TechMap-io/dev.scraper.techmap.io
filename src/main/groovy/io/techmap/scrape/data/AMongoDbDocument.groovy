@@ -35,10 +35,6 @@ abstract class AMongoDbDocument {
 			log.error "Invalid name for AMongoDbDocument with name '${this.name}' (idInSource: ${this.idInSource}) url: ${this.url}"
 			return false
 		}
-		if (this.name?.count("${this.name?.take(3)}") >= 2) { // find duplicate names such as "LeedsLeeds" (probably a Jsoup select problem)
-			log.error "Invalid idInSource '${this.idInSource}' for company: $this"
-			return false
-		}
 		if (this.url?.contains("@")) { // e.g., "https://E-Mail:chemnitz@accurat.eu"
 			log.error "Corrupt url '${this.url}' contains '@': $this"
 			// return false // DO NOT invalidate - will be extracted and handled elsewhere
