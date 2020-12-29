@@ -24,10 +24,10 @@ class Main {
 
 		System.setProperty("https.protocols", "TLSv1,TLSv1.1,TLSv1.2") // used in HTTP communication with external webservers
 
-		args = args*.split(',').flatten()*.trim() // Ugly workaround as Intellij does not allow multiple arguments
+		args = args*.split(',')?.flatten()*.trim() // Ugly workaround as IntelliJ does not allow multiple arguments
 		String	command	= (args.length >= 1 ? args?.getAt(0) : "")
 		String	source	= (args.length >= 2 ? args?.getAt(1) : "")
-		Integer	numberOfPages = ((args.length >= 3 ? args?.getAt(2) : "")?: "2") as Integer
+		Integer	numberOfPages = ((args.length >= 3 ? args?.getAt(2) : "")?: "5") as Integer
 		log.info "Starting with args: $args"
 
 		switch (command) {
@@ -38,11 +38,14 @@ class Main {
 				break
 		}
 
-		log.info "Finnished run with args: $args"
+		log.info "Finished run with args: $args"
 	}
 
 	static void scrapeSource(String source, Integer numberOfPages) {
-		Class<? extends AScraper> scraper = Class.forName("io.techmap.scrape.scraper.webscraper.${source}Scraper")
+		def scraper
+		try { scraper = scraper ?: Class.forName("io.techmap.scrape.scraper.webscraper.jobscraper.${source}Scraper")		} catch(e) { log.debug "Classloader problem: $e" }
+		try { scraper = scraper ?: Class.forName("io.techmap.scrape.scraper.webscraper.companyscraper.${source}Scraper")	} catch(e) { log.debug "Classloader problem: $e" }
+		try { scraper = scraper ?: Class.forName("io.techmap.scrape.scraper.webscraper.${source}Scraper")					} catch(e) { log.warn  "Classloader problem: $e" }
 		triggerScraper(scraper, numberOfPages)
 	}
 

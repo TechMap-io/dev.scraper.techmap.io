@@ -5,7 +5,7 @@ plugins {
 
 def projectName	= 'techmap-scraping-system'
 mainClassName	= 'io.techmap.scrape.Main'
-version			= '0.9.7'
+version			= '0.11.0'
 
 repositories {
 	mavenCentral()
@@ -15,13 +15,16 @@ repositories {
 
 dependencies {
 	// Use the latest Groovy version for building this library
-	compile group: 'org.codehaus.groovy',		name: 'groovy-all',								version: '3.0.5'
+	compile group: 'org.codehaus.groovy',		name: 'groovy-all',								version: '3.0.7'
 
 	// Data related Access
-	compile group: 'org.mongodb',				name: 'mongo-java-driver',						version: '3.12.6'
+	compile group: 'org.mongodb',				name: 'mongo-java-driver',						version: '3.12.7'
 
 	//  HTTP access - for Website interaction
 	compile group: 'org.jsoup',					name: 'jsoup',									version: '1.13.1'
+	compile group: 'org.gebish',				name: 'geb-core',								version: '4.0'
+	compile group: 'org.seleniumhq.selenium',	name: 'selenium-support',						version: '3.141.59'
+	compile group: 'org.seleniumhq.selenium',	name: 'selenium-chrome-driver',					version: '3.141.59'
 
 	//  Logging
 	compile group: 'org.slf4j',					name: 'slf4j-log4j12',							version: '1.7.30' // to suppress mongodb logs etc.

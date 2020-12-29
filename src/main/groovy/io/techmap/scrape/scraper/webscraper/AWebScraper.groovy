@@ -1,6 +1,7 @@
 /* Copyright © 2020, TechMap GmbH - All rights reserved. */
 package io.techmap.scrape.scraper.webscraper
 
+import geb.Browser
 import groovy.util.logging.Log4j2
 import io.techmap.scrape.connectors.MongoDBConnector
 import io.techmap.scrape.scraper.AScraper
@@ -10,6 +11,12 @@ import org.jsoup.HttpStatusException
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.select.Elements
+import org.openqa.selenium.chrome.ChromeDriver
+import org.openqa.selenium.chrome.ChromeDriverService
+import org.openqa.selenium.chrome.ChromeOptions
+import java.util.logging.Level
+import java.util.logging.Logger
+import java.util.concurrent.TimeUnit
 
 @Log4j2
 abstract class AWebScraper extends AScraper {
@@ -18,7 +25,14 @@ abstract class AWebScraper extends AScraper {
 	Map cookiesForThread = [:]	// used to handle cookies in multiple threads
 	static final Integer	TIMEOUT		= 1000 * 60	// 60 seconds
 	static String			USER_AGENT	= "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.123 Safari/537.36"
-
+	String getUserAgent()	{ return USER_AGENT }
+	
+	Browser			browser
+	ChromeDriver 	driver // Chromedriver - only initiated if needed
+	ChromeOptions	chromeOptions
+	static Boolean	headless		= false // false true
+	static Random	random			= new Random()
+	
 	AWebScraper(ArrayList sources, String baseSourceID) {
 	}
 
@@ -51,18 +65,18 @@ abstract class AWebScraper extends AScraper {
 
 	def loadResponse = { String url ->
 		if (Thread.currentThread().isInterrupted()) return null	// Needed to prevent "MongoInterruptedException"???
-
-		def cookies = this.cookiesForThread."${Thread.currentThread().getId()}" ?: [:]
+		
+		Map<String, String> cookies = this.cookiesForThread."${Thread.currentThread().getId()}" ?: [:]
 
 		def response = Jsoup.connect(url)
 				.timeout(TIMEOUT)
 				.userAgent(USER_AGENT)
+				.cookies(cookies)
 				.header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
-				.header("Accept-Encoding", "gzip, deflate, br")
 				.header("Accept-Language", "en-US,en;q=0.9,de;q=0.8,es;q=0.7")
-				.header("Cache-Control", "no-cache") // for Monster.at
-				.header("Connection", "keep-alive") // for Monster.at
-				.header("Pragma", "keep-alive") // for Monster.at
+				.header("Cache-Control", "no-cache")
+				.header("Connection", "keep-alive")
+				.header("Pragma", "keep-alive")
 				.header("Sec-Fetch-Dest", "document")
 				.header("Sec-Fetch-Mode", "navigate")
 				.header("Sec-Fetch-User", "?1")
@@ -71,15 +85,11 @@ abstract class AWebScraper extends AScraper {
 				.ignoreContentType(true)
 				.ignoreHttpErrors(true)
 		if (url.contains(".indeed.")) {
-			response = response.header("Sec-Fetch-Site", "same-origin")	// for indeed
-		} else if (url.contains("meinestadt.de")) { // special handing due to many more "404" for meinestadt.de
-			response = response.timeout(TIMEOUT * 4)
-			response = response.header("Sec-Fetch-Site", "none")
-			response = response.header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3")
+			response = response.header("Sec-Fetch-Site", "same-origin")
+			sleep 2000
 		} else {
 			response = response.header("Sec-Fetch-Site", "none")
 		}
-		if (!url.contains("dice.com"))		response = response.cookies(cookies)
 
 		if (!cookies) response = response.referrer("https://www.google.com/")
 		response = response.execute()
@@ -107,7 +117,7 @@ abstract class AWebScraper extends AScraper {
 				return null
 			}
 			return parsedDocument
-		} catch (java.lang.OutOfMemoryError e) {
+		} catch (OutOfMemoryError e) {
 			log.warn "$e for URL ${url}"
 			e.printStackTrace()
 		} catch (IllegalArgumentException e) { // url is null
@@ -115,13 +125,9 @@ abstract class AWebScraper extends AScraper {
 		} catch (HttpStatusException e) {
 			if (e.statusCode == 410) log.debug "HTTP Status 410 - URL is offline: ${url}"
 			else log.warn "$e #1 for $url"
-		} catch (java.io.IOException e) {
+		} catch (IOException e) {
 			if (e.toString().contains("Mark invalid")) log.debug "Mark invalid - URL is offline: ${url}"
 			else log.warn "$e #2 for $url"
-		} catch (ConnectException e) {
-			log.warn "$e for URL ${url}"
-		} catch (UnknownHostException e) {
-			log.warn "$e for URL ${url} - Sleep for 0"
 		} catch (e) {
 			log.warn "$e for URL ${url} - Sleep for 0"
 		}
@@ -131,11 +137,10 @@ abstract class AWebScraper extends AScraper {
 	/** For loading JSON, XML, etc. **/
 	def loadParseable = { url, payload ->
 		try {
-			def cookies = this.cookiesForThread."${Thread.currentThread().getId()}" ?: [:]
+			Map<String, String> cookies = this.cookiesForThread."${Thread.currentThread().getId()}" ?: [:]
 
 			def response = Jsoup.connect(url)
 					.timeout(TIMEOUT)
-					.ignoreContentType(true)
 					.userAgent(USER_AGENT)
 					.cookies(cookies)
 					.method(Connection.Method.POST)
@@ -168,5 +173,75 @@ abstract class AWebScraper extends AScraper {
 		}
 		return null
 	}
-
+	
+	/**********************************/
+	/* Geb & Selenium related Section */
+	/**********************************/
+	
+	def simulateHumanDelay = { Integer avgTime = 1000
+		long choosenTime = ((0.75 + random.nextInt(50) / 100) * avgTime)
+		Thread.sleep(choosenTime) // wait/sleep avgTime +/- 25%
+	}
+	
+	protected Browser loadBrowser() {
+		if (this.browser) return this.browser
+		
+		// create driver if not exists
+		def driver = getSeleniumDriver()
+		
+		this.browser = new Browser(driver: driver)
+		return this.browser
+	}
+	
+	private ChromeDriver getSeleniumDriver(String proxy = "") {
+		// Disable webdriver & selenium logs
+		System.setProperty(ChromeDriverService.CHROME_DRIVER_SILENT_OUTPUT_PROPERTY, "true")
+		System.setProperty("webdriver.chrome.silentOutput", "true")
+		Logger.getLogger("org.openqa.selenium").setLevel(Level.OFF)
+		Logger.getLogger("org.openqa.selenium.WebDriverException").setLevel(Level.OFF)
+		Logger.getLogger("org.openqa.selenium.NoSuchSessionException").setLevel(Level.OFF)
+		
+		log.info "Running on OS                     '${System.getProperty("os.name")}'"
+		log.info "Running on OS Architecture        '${System.getProperty("os.arch")}'"
+		System.setProperty("geb.build.reportsDir",	"/app/screenshots")
+		switch(System.getProperty("os.name")) {
+			case ~/(?i).*mac.*/:
+				System.setProperty("webdriver.chrome.driver",	"driver/chromedriver_mac64")
+				System.setProperty("geb.build.reportsDir",		"screenshots")
+				break
+			case ~/(?i).*nux.*/:	System.setProperty("webdriver.chrome.driver", "/app/chromedriver");				break	// For use in Docker container
+			case ~/(?i).*nix.*/:	System.setProperty("webdriver.chrome.driver", "driver/chromedriver_unix64");	break
+			case ~/(?i).*win.*/:	System.setProperty("webdriver.chrome.driver", "driver/chromedriver_win32");		break
+			default:				System.setProperty("webdriver.chrome.driver", "chromedriver")
+		}
+		log.info "Using chromedriver at             '${System.getProperty("webdriver.chrome.driver")}'"
+		log.info "Saving screenshots to             '${System.getProperty("geb.build.reportsDir")}'"
+		
+		// Init chromedriver
+		this.chromeOptions = new ChromeOptions()
+		this.chromeOptions.addArguments("--window-size=1440,1080")
+		this.chromeOptions.addArguments("--ignore-certificate-errors")
+		if (headless) {
+			// Headless based on https://www.scrapingbee.com/blog/introduction-to-chrome-headless/
+			this.chromeOptions.addArguments("--headless")
+			this.chromeOptions.addArguments("--disable-gpu")
+			this.chromeOptions.addArguments("--no-sandbox")					// for Docker! (not necessary on Mac)
+			this.chromeOptions.addArguments("--disable-dev-shm-usage")		// for Docker! (not necessary on Mac)
+			this.chromeOptions.addArguments("--whitelisted-ips")			// for Docker! (not necessary on Mac)
+			log.debug "Using Chrome                      headless"
+		} else {
+			log.debug "Using Chrome                      NOT headless"
+		}
+		if (proxy) {
+			this.chromeOptions.addArguments("--proxy-server=$proxy")
+			log.info "Trying proxy:                     $proxy"
+		}
+		this.driver = new ChromeDriver(this.chromeOptions)
+		// Change timeouts to reduce "Timed out receiving message from renderer" and "screenshot failed, retrying timeout: Timed out receiving message from renderer"
+		this.driver.manage().timeouts().pageLoadTimeout	(60L, TimeUnit.SECONDS)	// NOTE: negative value means indefinite
+		this.driver.manage().timeouts().setScriptTimeout(30L, TimeUnit.SECONDS)
+		// this.driver.manage().timeouts().implicitlyWait	(30L, TimeUnit.SECONDS) // WARN: will add a delay of 30 seconds to every command that selenium runs?
+		return this.driver
+	}
+	
 }

@@ -7,7 +7,8 @@ import groovy.util.logging.Log4j2
 import io.techmap.scrape.data.Company
 import io.techmap.scrape.data.Job
 import io.techmap.scrape.data.Location
-
+import io.techmap.scrape.helpers.ShutdownException
+import io.techmap.scrape.scraper.webscraper.AWebScraper
 import org.bson.Document
 
 @Log4j2
@@ -29,16 +30,26 @@ abstract class AScraper {
 		def startTime = new Date()
 
 		def myRunnable = scraper.newInstance(sourceToScrape)
-		scraper.jobsInAllSourcesCount = myRunnable.scrape()
+		try {
+			scraper.jobsInAllSourcesCount = myRunnable.scrape()
+		} catch (ShutdownException e) {
+			log.debug e.getMessage()
+		}
+		if (myRunnable instanceof AWebScraper) {
+			def webscraper = (AWebScraper) myRunnable
+			if (webscraper.browser) {
+				try { webscraper.browser.close() } catch(e) { /* ignore */ }
+			}
+		}
 
-		log.info "End of scraping ${scraper.jobsInAllSourcesCount?.toString().padLeft(5)} jobs in source ${myRunnable.sourceID} within " + TimeCategory.minus( new Date() , startTime )
+		log.info "End of scraping ${scraper.jobsInAllSourcesCount?.toString()?.padLeft(5)} jobs in source ${myRunnable.sourceID} within " + TimeCategory.minus( new Date() , startTime )
 	}
 
 	/******************/
 	/* Helper Methods */
 	/******************/
 
-	boolean crossreferenceAndSaveData(Job job, Location location, Company company, Document rawPage) {
+	static boolean crossreferenceAndSaveData(Job job, Location location, Company company, Document rawPage) {
 		if (location && company)	location.name		= company.name
 		if (location && job){
 			location.contacts	= (location.contacts ?: []) + job.contact
@@ -56,7 +67,7 @@ abstract class AScraper {
 		println new JsonBuilder( job )//.toPrettyString()
 		// println new JsonBuilder( location )//.toPrettyString()
 		// println new JsonBuilder( company )//.toPrettyString()
-		maxDocsToPrint--
+		if (--maxDocsToPrint <= 0) throw new ShutdownException("Reached maxDocsToPrint: shutting down system.")
 
 		// NOTE: rawPage will be send to AWS S3 (sourcecode not included) - it needs the fields html and url
 		if (!rawPage.html || !rawPage.url) log.error "RawPage is missing essential data!"

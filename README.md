@@ -4,19 +4,19 @@ This scraping system is used to extract data from job portals such as stepstone,
 etc. by iterating over categories (or industries, jobnames, etc.), then drilling down the pagination and
 finally extracting information from the job ad page.
 
-Your task is to create a new Scraper in Groovy/Java similar to the included class `StepstoneScraper.groovy` (in
-the directory `./src/main/io/techmap/scrape/scraper/webscraper`). You mainly need to adapt the CSS
+Your task is to create a new Scraper in Groovy/Java similar to the included class `StepstoneJobsScraper.groovy` (in
+the directory `./src/main/io/techmap/scrape/scraper/webscraper/jobscraper`). You mainly need to adapt the CSS
 selectors to for the targeted Website (as described in your Task).Try to scrape as many information as
 possible from the page by checking the fields of the data classes `Job.groovy`, `Location.groovy`, and `Company.groovy`
 (as well as the shared classes in `./src/main/io/techmap/scrape/data/shared`).
 
 To get accustomed to the system, test if the system works on your computer by executing the steps in
-"Executing the System" (see below). The system should run out-of-the-box and scrape 2 pages from the
+"Executing the System" (see below). The system should run out-of-the-box and scrape 5 pages from the
 Stepstone website.
 
 ## General Process:
-1. Copy the class `StepstoneScraper.groovy` and rename appropriately (NOTE: the class must end with
-`Scraper.groovy` - see `Main.scrapeSource()` that uses a classloader)
+1. Copy the class `StepstoneJobsScraper.groovy` and rename appropriately (NOTE: for job scraper the class must end with
+`JobsScraper.groovy` while company scraper must end with `CompaniesScraper.groovy` - see `Main.scrapeSource()` that uses a classloader)
 2. Go to the website to scrape and find a list of categories, industries, sectors or jobnames the website uses to group
 their job ads (favor industries before categories before jobnames)
 3. Adapt method `scrape()` in your Class to select the groups (i.e., categories, industries or jobnames)
@@ -47,9 +47,14 @@ below).
 
 ### Please Note:
 * No other classes than your Scraper class should be changed or added - if you find a Bug please comment
-and send an Email or Pull Request.
+  and send an Email or Pull Request.
 * Some classes and method might not seem to do much - this is due to the reduction from the main system -
-many methods are gutted.
+  many methods are gutted.
+
+### Problem handling
+> TIP: If scraping with **JSoup** is not possible - due to blocking, use of tokens, or heavy use of Javascript (e.g., that loads Jobs as JSON) you can
+use a **Selenium** variant via Geb (see gebish.org). An example can be found in the `TotaljobJobsScraper.groovy` class.
+
 
 ## Executing the System
 To execute the system you can run it from the shell/cli, an IDE such as IntelliJ IDEA or via a Docker container. The system takes three arguments:
@@ -74,7 +79,7 @@ The output should look somewhat like this:
 2020-09-11 14:14:57.472 INFO  Main                       - Selftest successful: Looks like I'm running OK!
 2020-09-11 14:14:57.472 INFO  Main                       - Finnished run with args: [selftest]
 ```
-* `gradle run --args=scrape,Stepstone,2 > techmap_run.log` to scrape pages from a Stepstone website
+* `gradle run --args=scrape,StepstoneJobs,2 > techmap_run.log` to scrape pages from a Stepstone website
 The output should look somewhat like this:
 ```
 2020-09-11 14:23:37.275 INFO  Main                       - Program is using Java version 11.0.8
@@ -95,17 +100,17 @@ The output should look somewhat like this:
 2020-09-11 14:23:39.633 INFO  Main                       - End of scraping 2 jobs of source stepstone_nl
 2020-09-11 14:23:39.634 INFO  Main                       - Finnished run with args: [scrape, Stepstone, 1]
 ```
-NOTE: Please note that the scraped data is printed directly to stdout - to view it in a more readable way
+> TIP: Please note that the scraped data is printed directly to stdout - to view it in a more readable way
 you can switch on `toPrettyString()` in the method `AWebScraper.crossreferenceAndSaveData()` or copy the
 lines and use the website http://jsonviewer.stack.hu/
 
 ### To execute in IntelliJ IDEA:
 Install the plugins for Gradle and Groovy - the IntelliJ IDEA Community Edition is sufficient (you do not need
 to have the Ultimate edition). Add a "Gradle Task" to the Execution configuration
-(Menu "Run" --> "Edit configurations...") and set the task to `run --args=scrape,Stepstone,2`.
+(Menu "Run" --> "Edit configurations...") and set the task to `run --args=scrape,StepstoneJobs,2`.
 You should be able to run or debug the system from the menu.
 
 ### To execute with docker
 Install docker on your system and run the following commands in the directory with the Dockerfile:
 * `docker build -t tss_test .` to build the docker image
-* `docker run tss_test:latest scrape Stepstone 2` to run the docker image
+* `docker run tss_test:latest scrape StepstoneJobs 2` to run the docker image
